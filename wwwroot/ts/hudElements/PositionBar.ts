@@ -3,9 +3,10 @@ import {laptimeFormat, valueIsValidAssertUndefined, validNumberOrDefault, nameFo
 import {EFinishStatus, ESession, IDriverData, ISectors} from "../r3eTypes.js";
 import {Driver, getRaceDeltas, getUid} from "../utils.js";
 import SettingsValue from "../SettingsValue.js";
+import {SharedMemoryKey} from '../SharedMemoryConsumer.js';
 
 export default class PositionBar extends HudElement {
-    override sharedMemoryKeys: string[] = ['driverData', 'position', 'sessionType', 'sectorTimesSessionBestLap'];
+    override sharedMemoryKeys: SharedMemoryKey[] = ['driverData', 'position', 'sessionType', 'sectorTimesSessionBestLap'];
 
     protected override render(driverData: IDriverData[], position: number, sessionType: ESession, sessionBestSectors: ISectors, elementId: string): Hide | null {
         const positionBar = document.getElementById(elementId);
