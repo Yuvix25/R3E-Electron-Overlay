@@ -1,11 +1,14 @@
+using log4net;
 using Newtonsoft.Json.Linq;
 
 namespace ReHUD.UpgradeActions;
 
 public class MoveHudLayoutToSeparateFile : UpgradeAction
 {
+    private static readonly ILog logger = LogManager.GetLogger(typeof(MoveHudLayoutToSeparateFile));
+
     public override string Description => "Move HUD layout to separate file";
-    public MoveHudLayoutToSeparateFile(Version fromVersion) : base(fromVersion, Version.Parse("0.8.0")) { }
+    public override Version Version => Version.Parse("0.8.0");
 
     public override void Upgrade()
     {
@@ -14,7 +17,7 @@ public class MoveHudLayoutToSeparateFile : UpgradeAction
             HudLayout.LoadHudLayouts();
             var hudLayout = (JObject?) Startup.settings.Data.Remove("hudLayout") ?? (!HudLayout.Layouts.Any() ? new JObject() : null);
             if (hudLayout != null) {
-                Startup.logger.Info("Found HUD layout in settings, moving to separate file");
+                logger.Info("Found HUD layout in settings, moving to separate file");
 
                 HudLayout hudLayoutData = HudLayout.AddHudLayout(new(true));
 
@@ -33,7 +36,7 @@ public class MoveHudLayoutToSeparateFile : UpgradeAction
                 Startup.settings.Save();
             }
         } catch (Exception e) {
-            Startup.logger.Error("Failed to move HUD layout to separate file", e);
+            logger.Error("Failed to move HUD layout to separate file", e);
         }
     }
 }

@@ -1,13 +1,11 @@
 namespace ReHUD.UpgradeActions;
 
 public abstract class UpgradeAction {
-    public Version FromVersion { get; }
-    public Version ToVersion { get; }
+    public abstract Version Version { get; }
     public abstract string Description { get; }
 
-    protected UpgradeAction(Version fromVersion, Version toVersion) {
-        FromVersion = fromVersion;
-        ToVersion = toVersion;
+    public bool IsApplicable(Version oldVersion, Version newVersion) {
+        return Version.CompareTo(oldVersion) > 0 && Version.CompareTo(newVersion) <= 0;
     }
 
     public abstract void Upgrade();

@@ -119,7 +119,7 @@ public class Startup
                     await CreateMainWindow();
                     await CreateSettingsWindow(env);
 
-                    this.raceroomObserver.Start();
+                    raceroomObserver.Start();
                 }
                 catch (Exception e) {
                     logger.Error("Error creating windows", e);

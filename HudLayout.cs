@@ -1,6 +1,7 @@
 using System.Reflection;
 using ElectronNET.API;
 using ElectronNET.API.Entities;
+using log4net;
 using Newtonsoft.Json;
 using ReHUD.Interfaces;
 using ReHUD.Models;
@@ -9,6 +10,8 @@ namespace ReHUD;
 
 public class HudLayout : JsonUserData
 {
+    private static readonly ILog logger = LogManager.GetLogger(typeof(HudLayout));
+
     private static readonly Dictionary<string, HudLayout> layouts = new();
     public static IEnumerable<HudLayout> Layouts => layouts.Values;
     public static HudLayout? ActiveHudLayout { get; private set; }
@@ -183,7 +186,7 @@ public class HudLayout : JsonUserData
         if (this == hudLayout) return;
         if (hudLayout.Name != Name)
         {
-            Startup.logger.ErrorFormat("Attempted to copy HUD layout with different ID: {0} != {1}", hudLayout.Name, Name);
+            logger.ErrorFormat("Attempted to copy HUD layout with different ID: {0} != {1}", hudLayout.Name, Name);
             return;
         }
         IsReplayLayout = hudLayout.IsReplayLayout;
@@ -243,14 +246,14 @@ public class HudLayout : JsonUserData
 
     public static bool SetActiveLayout(HudLayout layout, bool setActive = true)
     {
-        Startup.logger.InfoFormat("Setting active layout to {0}", layout.Name);
+        logger.InfoFormat("Setting active layout to {0}", layout.Name);
         if (Startup.IsInEditMode) {
-            Startup.logger.Warn("Not setting active layout because we're in edit mode");
+            logger.Warn("Not setting active layout because we're in edit mode");
             return false;
         }
         if (ExistsAndIsDifferent(layout) != null)
         {
-            Startup.logger.WarnFormat("Attempted to set active layout to a layout different than the one in the list: {0}", layout.Name);
+            logger.WarnFormat("Attempted to set active layout to a layout different than the one in the list: {0}", layout.Name);
             return false;
         }
         ActiveHudLayout = layout;
@@ -267,7 +270,7 @@ public class HudLayout : JsonUserData
     {
         var prop = typeof(HudLayout).GetField(property, BindingFlags.NonPublic | BindingFlags.Instance);
         if (prop == null) {
-            Startup.logger.ErrorFormat("Failed to find property '{0}' in HudLayout", property);
+            logger.ErrorFormat("Failed to find property '{0}' in HudLayout", property);
             return;
         }
         if (setValue)
@@ -293,7 +296,7 @@ public class HudLayout : JsonUserData
             var res = SetActiveLayout(ReplayHudLayout, true);
             if (!res) return null;
             BeforeReplayHudLayout = before;
-            Startup.logger.InfoFormat("Loaded replay layout: {0}", ReplayHudLayout.Name);
+            logger.InfoFormat("Loaded replay layout: {0}", ReplayHudLayout.Name);
             return ReplayHudLayout;
         }
         return null;
@@ -306,7 +309,7 @@ public class HudLayout : JsonUserData
             var res = SetActiveLayout(layout);
             if (!res) return null;
             BeforeReplayHudLayout = null;
-            Startup.logger.InfoFormat("Loaded normal layout: {0}", layout.Name);
+            logger.InfoFormat("Loaded normal layout: {0}", layout.Name);
             return layout;
         }
         return null;
@@ -379,7 +382,7 @@ public class HudLayout : JsonUserData
             var layoutName = $"LayoutPreset{i}";
             if (!NameTaken(layoutName))
             {
-                Startup.logger.InfoFormat("Found free name for HUD layout: {0}", layoutName);
+                logger.InfoFormat("Found free name for HUD layout: {0}", layoutName);
                 return layoutName;
             }
         }

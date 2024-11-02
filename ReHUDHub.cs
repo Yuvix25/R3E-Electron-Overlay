@@ -1,12 +1,13 @@
+using log4net;
 using Microsoft.AspNetCore.SignalR;
 using ReHUD;
 using ReHUD.Interfaces;
-using ReHUD.Services;
 
 namespace SignalRChat.Hubs
 {
     public class ReHUDHub : Hub
     {
+        private static readonly ILog logger = LogManager.GetLogger(typeof(ReHUDHub));
         public void Log(string level, double startTimestamp, double endTimestamp, string message) {
             try {
                 if (startTimestamp != -1) {
@@ -17,18 +18,16 @@ namespace SignalRChat.Hubs
                 }
 
                 LogMessage logMessage = new(startTimestamp, endTimestamp, message);
-                if (Startup.logger != null) {
-                    switch (level) {
-                        case "WARN":
-                            Startup.logger.Warn(logMessage);
-                            break;
-                        case "ERROR":
-                            Startup.logger.Error(logMessage);
-                            break;
-                        default:
-                            Startup.logger.Info(logMessage);
-                            break;
-                    }
+                switch (level) {
+                    case "WARN":
+                        logger.Warn(logMessage);
+                        break;
+                    case "ERROR":
+                        logger.Error(logMessage);
+                        break;
+                    default:
+                        logger.Info(logMessage);
+                        break;
                 }
             }
             catch (Exception e) {
@@ -44,33 +43,33 @@ namespace SignalRChat.Hubs
 
         public void SaveBestLap(int lapId, double[] points, double pointsPerMeter)
         {
-            Startup.logger.InfoFormat("SaveBestLap: lapId={0}, points={1}, pointsPerMeter={2}", lapId, points.Length, pointsPerMeter);
+            logger.InfoFormat("SaveBestLap: lapId={0}, points={1}, pointsPerMeter={2}", lapId, points.Length, pointsPerMeter);
             var r3eDataService = GetR3EDataService();
             if (r3eDataService == null) {
-                Startup.logger.Error("SaveBestLap: r3eDataService is null");
+                logger.Error("SaveBestLap: r3eDataService is null");
                 return;
             }
 
             try {
                 r3eDataService.SaveBestLap(lapId, points, pointsPerMeter);
             } catch (Exception e) {
-                Startup.logger.Error("SaveBestLap: Failed to save best lap", e);
+                logger.Error("SaveBestLap: Failed to save best lap", e);
             }
         }
 
         public string LoadBestLap()
         {
-            Startup.logger.InfoFormat("LoadBestLap Invoked");
+            logger.InfoFormat("LoadBestLap Invoked");
             var r3eDataService = GetR3EDataService();
             if (r3eDataService == null) {
-                Startup.logger.Error("LoadBestLap: r3eDataService is null");
+                logger.Error("LoadBestLap: r3eDataService is null");
                 return "{}";
             }
 
             try {
                 return r3eDataService.LoadBestLap();
             } catch (Exception e) {
-                Startup.logger.Error("LoadBestLap: Failed to load best lap", e);
+                logger.Error("LoadBestLap: Failed to load best lap", e);
                 return "{}";
             }
         }

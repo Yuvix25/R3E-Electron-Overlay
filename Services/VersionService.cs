@@ -33,13 +33,7 @@ public class VersionService : UserData, IDisposable, IVersionService
     public VersionService() { }
 
     public void Dispose() {
-        Dispose(true);
         GC.SuppressFinalize(this);
-    }
-
-    protected virtual void Dispose(bool disposing) {
-        if (disposing) {
-        }
     }
 
     public override string Serialize() {
@@ -100,15 +94,12 @@ public class VersionService : UserData, IDisposable, IVersionService
         return redirectedUrl;
     }
 
-    private static IEnumerable<UpgradeAction> GetAllUpgradeActions(Version oldVersion) {
-        return (new UpgradeAction[] {
-            new MoveHudLayoutToSeparateFile(oldVersion),
-            new MoveDataFromJsonToSQLite(oldVersion),
-        }).OrderBy(action => action.ToVersion).ToArray();
-    }
-
     private static IEnumerable<UpgradeAction> GetRelevantUpgradeActions(Version oldVersion, Version newVersion) {
-        return GetAllUpgradeActions(oldVersion).Where(action => action.ToVersion.CompareTo(oldVersion) > 0 && action.ToVersion.CompareTo(newVersion) <= 0).ToArray();
+        return Assembly.GetExecutingAssembly().GetTypes()
+            .Where(type => type.IsSubclassOf(typeof(UpgradeAction)) && !type.IsAbstract)
+            .Select(type => (UpgradeAction)Activator.CreateInstance(type)!)
+            .Where(action => action.IsApplicable(oldVersion, newVersion))
+            .OrderBy(action => action.Version);
     }
 
     public async Task Update() {
@@ -127,16 +118,16 @@ public class VersionService : UserData, IDisposable, IVersionService
     }
 
     private static void OnVersionChanged(Version previousVersion, Version version) {
-        Startup.logger.InfoFormat("Upgrading ReHUD from v{0} to v{1}", previousVersion, version);
+        logger.InfoFormat("Upgrading ReHUD from v{0} to v{1}", previousVersion, version);
 
         foreach (var action in GetRelevantUpgradeActions(previousVersion, version)) {
-            Startup.logger.InfoFormat("Running upgrade action v{0}: {1}", action.ToVersion, action.Description);
+            logger.InfoFormat("Running upgrade action v{0}: {1}", action.Version, action.Description);
             action.Upgrade();
         }
     }
 
     [AttributeUsage(AttributeTargets.Method)]
-    private class UpgradeActionAttribute : Attribute {
+    public class UpgradeActionAttribute : Attribute {
         public UpgradeActionAttribute(string version, string name) {
             Version = Version.Parse(version);
             Name = name;

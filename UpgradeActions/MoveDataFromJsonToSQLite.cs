@@ -1,21 +1,22 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using log4net;
 using ReHUD.Interfaces;
-using ReHUD.Models.LapData;
 
 namespace ReHUD.UpgradeActions;
 
 public class MoveDataFromJsonToSQLite : UpgradeAction
 {
+    private static readonly ILog logger = LogManager.GetLogger(typeof(MoveDataFromJsonToSQLite));
+
     public override string Description => "Move data from JSON to SQLite (remove old JSON files)";
-    public MoveDataFromJsonToSQLite(Version fromVersion) : base(fromVersion, Version.Parse("0.10.0")) { }
+    public override Version Version => Version.Parse("0.11.0");
 
     private static void DeleteFile(string name) {
         try {
             File.Delete(Path.Combine(IUserData.dataPath, name));
         } catch (DirectoryNotFoundException) {
+            logger.InfoFormat("File {0} not found during upgrade", name);
         } catch (Exception e) {
-            Startup.logger.Error($"Failed to delete {name} during upgrade", e);
+            logger.Error($"Failed to delete {name} during upgrade", e);
         }
     }
 
