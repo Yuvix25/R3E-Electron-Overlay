@@ -1,10 +1,12 @@
 using ElectronNET.API;
+using log4net;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace ReHUD;
 
 static class IpcCommunication {
+    private static readonly ILog logger = LogManager.GetLogger(typeof(IpcCommunication));
     public static readonly int DELAY_WARNING = 100;
     public static readonly int DELAY_ERROR = 500;
 
@@ -13,7 +15,7 @@ static class IpcCommunication {
     /// </summary>
     public static async Task<JToken?> Invoke(BrowserWindow window, string channel, object? data = null) {
         if (window == null) {
-            Startup.logger.Error("Window is null");
+            logger.Error("Window is null");
             return null;
         }
 
@@ -21,7 +23,7 @@ static class IpcCommunication {
 
         var conversationid = Guid.NewGuid().ToString();
         if (conversationid == null) {
-            Startup.logger.Error("Failed to generate conversation ID");
+            logger.Error("Failed to generate conversation ID");
             return null;
         }
         var newData = new List<object> { conversationid };
@@ -36,16 +38,16 @@ static class IpcCommunication {
 
                     var diff = timeNow - array[0].ToObject<long>();
                     if (diff > DELAY_WARNING) {
-                        Startup.logger.WarnFormat("IPC responded in {0}ms", diff);
+                        logger.WarnFormat("IPC responded in {0}ms", diff);
                     }
                     if (diff > DELAY_ERROR) {
-                        Startup.logger.ErrorFormat("IPC responded in {0}ms", diff);
+                        logger.ErrorFormat("IPC responded in {0}ms", diff);
                     }
                     if (array.Count > 1) {
                         promise.SetResult(array[1]);
                     }
                 } catch (Exception e) {
-                    Startup.logger.Error("Error invoking IPC", e);
+                    logger.Error("Error invoking IPC", e);
                 }
 
                 promise.SetResult(null);
@@ -54,7 +56,7 @@ static class IpcCommunication {
 
             return await promise.Task;
         } catch (Exception e) {
-            Startup.logger.Error($"Error invoking IPC window={window} channel={channel} newData={newData}", e);
+            logger.ErrorFormat($"Error invoking IPC window={window} channel={channel} newData={newData}", e);
             return null;
         }
     }
