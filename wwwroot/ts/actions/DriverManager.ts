@@ -154,7 +154,7 @@ export default class DriverManager extends Action {
                 const shouldLoad = this.drivers[uid].setAsMainDriver();
                 
                 if (shouldLoad) {
-                    Hud.hub.invoke('LoadBestLap', data.layoutId, driver.driverInfo.modelId, driver.driverInfo.classPerformanceIndex).then((data) => {
+                    Hud.hub.invoke('LoadBestLap').then((data) => {
                         const dataObj = JSON.parse(data);
                         if (dataObj.lapTime != null) {
                             Driver.loadBestLap(dataObj.lapTime, dataObj.lapPoints, dataObj.pointsPerMeter);
