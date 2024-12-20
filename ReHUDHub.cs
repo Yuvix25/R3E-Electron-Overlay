@@ -1,7 +1,6 @@
 using log4net;
 using Microsoft.AspNetCore.SignalR;
 using ReHUD;
-using ReHUD.Interfaces;
 
 namespace SignalRChat.Hubs
 {
@@ -32,45 +31,6 @@ namespace SignalRChat.Hubs
             }
             catch (Exception e) {
                 Console.WriteLine(e);
-            }
-        }
-
-
-        private IR3EDataService? GetR3EDataService()
-        {
-            return Context.GetHttpContext()?.RequestServices.GetService<IR3EDataService>();
-        }
-
-        public void SaveBestLap(int lapId, double[] points, double pointsPerMeter)
-        {
-            logger.InfoFormat("SaveBestLap: lapId={0}, points={1}, pointsPerMeter={2}", lapId, points.Length, pointsPerMeter);
-            var r3eDataService = GetR3EDataService();
-            if (r3eDataService == null) {
-                logger.Error("SaveBestLap: r3eDataService is null");
-                return;
-            }
-
-            try {
-                r3eDataService.SaveBestLap(lapId, points, pointsPerMeter);
-            } catch (Exception e) {
-                logger.Error("SaveBestLap: Failed to save best lap", e);
-            }
-        }
-
-        public string LoadBestLap()
-        {
-            logger.InfoFormat("LoadBestLap Invoked");
-            var r3eDataService = GetR3EDataService();
-            if (r3eDataService == null) {
-                logger.Error("LoadBestLap: r3eDataService is null");
-                return "{}";
-            }
-
-            try {
-                return r3eDataService.LoadBestLap();
-            } catch (Exception e) {
-                logger.Error("LoadBestLap: Failed to load best lap", e);
-                return "{}";
             }
         }
     }

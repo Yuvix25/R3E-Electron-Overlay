@@ -18,6 +18,7 @@ public struct R3EExtraData
     public TireWearObj? tireWearLastLap;
     public double? averageLapTime;
     public double? bestLapTime;
+    public double? sessionBestLapTime;
     public int? estimatedRaceLapCount;
     public double? lapsUntilFinish;
     public bool forceUpdateAll;
@@ -25,6 +26,16 @@ public struct R3EExtraData
     public double timestamp;
 
     public ICollection<EventLog> events;
+
+    public Dictionary<string, double?> deltasAhead;
+    public Dictionary<string, double?> deltasBehind;
+    public int leaderCrossedFinishLineAt0;
+
+    public double? deltaToSessionBestLap;
+    public double? deltaToBestLap;
+
+    public bool crossedFinishLine;
+    public double? currentLaptime;
 
 
     /// <summary>
@@ -65,12 +76,23 @@ public struct R3EExtraData
             tireWearLastLap = new TireWearObj(),
             averageLapTime = 0,
             bestLapTime = 0,
+            sessionBestLapTime = 0,
             estimatedRaceLapCount = 0,
             lapsUntilFinish = 0,
             allTimeBestLapTime = 0,
             events = Array.Empty<EventLog>(),
             lapId = null,
             lastLapTime = 0,
+
+            deltasAhead = new Dictionary<string, double?>(),
+            deltasBehind = new Dictionary<string, double?>(),
+            leaderCrossedFinishLineAt0 = 0,
+
+            deltaToSessionBestLap = null,
+            deltaToBestLap = null,
+
+            crossedFinishLine = false,
+            currentLaptime = null,
 
             forceUpdateAll = true,
             rawData = new R3EData {

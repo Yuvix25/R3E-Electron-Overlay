@@ -4,7 +4,6 @@ using log4net;
 using R3E;
 using R3E.Data;
 using ReHUD.Interfaces;
-using ReHUD.Models;
 using ReHUD.Utils;
 
 namespace ReHUD.Services;
@@ -65,7 +64,7 @@ public class EventService : IEventService {
             switch (e) {
                 case DriverEventArgs driverEventArgs:
                     if (driverEventArgs.IsMainDriver) {
-                        logger.InfoFormat("'{0}' event raised for '{1}' (main driver)", name, Driver.GetDriverName(driverEventArgs.Driver.driverInfo));
+                        logger.InfoFormat("'{0}' event raised for '{1}' (main driver)", name, DriverUtils.GetDriverName(driverEventArgs.Driver.driverInfo));
                     }
                     eventLogs.Add(new DriverEventLog(name, driverEventArgs.Driver, driverEventArgs.IsMainDriver));
                     break;
@@ -104,7 +103,7 @@ public class EventService : IEventService {
         valueListeners.Add(new ModeSwitchListener(() => PushToPassActivate, () => PushToPassDeactivate, data => data.pushToPass.engaged == 1, false));
         valueListeners.Add(new ModeSwitchListener(() => PushToPassReady, () => null, data => data.pushToPass.available == 1 && data.pushToPass.engaged == 0 && data.pushToPass.waitTimeLeft == 0, false));
 
-        valueListeners.Add(new DriverModeSwitchListener(() => MainDriverChange, () => null, (data, driver) => driver.place == data.position));
+        // valueListeners.Add(new DriverModeSwitchListener(() => MainDriverChange, () => null, (data, driver) => driver.place == data.position, true));
         valueListeners.Add(new DriverModeSwitchListener(() => EnterPitlane, () => ExitPitlane, (data, driver) => driver.inPitlane == 1, true));
 
         valueListeners.Add(new DriverEventRaiser(() => NewLap, (oldData, newData, oldDriver, newDriver, isMainDriver) => {
@@ -136,6 +135,10 @@ public class EventService : IEventService {
             
             return ImmutableList.CreateRange(eventLogs);
         }
+    }
+
+    public void MainDriverChanged(R3EData data, DriverData driver) {
+        MainDriverChange?.Invoke(this, new DriverEventArgs(null, data, driver, true));
     }
 
     private void ProcessValueListeners() {

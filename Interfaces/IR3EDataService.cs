@@ -1,5 +1,6 @@
 ﻿using ElectronNET.API;
 using ReHUD.Models;
+using ReHUD.Models.LapData;
 
 namespace ReHUD.Interfaces
 {
@@ -14,7 +15,7 @@ namespace ReHUD.Interfaces
         public void SetEnteredEditMode();
         public Task SendEmptyData();
 
-        public void SaveBestLap(int lapId, double[] points, double pointsPerMeter);
-        public string LoadBestLap();
+        public void SaveBestLap(Lap lap, double[] points, int pointsGap);
+        public Lap? LoadBestLap();
     }
 }

@@ -18,7 +18,7 @@ namespace ReHUD.Services {
         public LapDataService() {
             try {
                 Directory.CreateDirectory(Path.GetDirectoryName(ILapDataService.DATA_PATH)!);
-                context = new LapDataContext(new DbContextOptionsBuilder<LapDataContext>().EnableSensitiveDataLogging().UseLazyLoadingProxies().UseSqlite($"Data Source={ILapDataService.DATA_PATH};Mode=ReadWriteCreate").Options);
+                context = new LapDataContext();
                 context.Database.Migrate();
                 context.Database.EnsureCreated();
                 DisableWAL();
@@ -217,19 +217,19 @@ namespace ReHUD.Services {
             }
         }
 
-        public LapData? GetLap(int lapId) {
+        public Lap? GetLap(int lapId) {
             return context.LapDatas.Find(lapId);
         }
 
-        public static LapData? GetBestLap(LapContext? context) {
+        public static Lap? GetBestLap(LapContext? context) {
             return context?.BestLap;
         }
 
-        public LapData? GetCarBestLap(int trackLayoutId, int carId, Constant.TireSubtype frontTireCompound, Constant.TireSubtype rearTireCompound) {
+        public Lap? GetCarBestLap(int trackLayoutId, int carId, Constant.TireSubtype frontTireCompound, Constant.TireSubtype rearTireCompound) {
             return GetBestLap(GetExactLapContext(trackLayoutId, carId, frontTireCompound, rearTireCompound));
         }
 
-        public LapData? GetClassBestLap(int trackLayoutId, int carId, int classPerformanceIndex, Constant.TireSubtype frontTireCompound, Constant.TireSubtype rearTireCompound) {
+        public Lap? GetClassBestLap(int trackLayoutId, int carId, int classPerformanceIndex, Constant.TireSubtype frontTireCompound, Constant.TireSubtype rearTireCompound) {
             return GetBestLap(GetClassLapContext(trackLayoutId, carId, classPerformanceIndex, frontTireCompound, rearTireCompound));
         }
 
@@ -238,7 +238,7 @@ namespace ReHUD.Services {
         /// Updates the best lap for a car and track layout if the given lap is better.
         /// </summary>
         /// <param name="lapData">The lap to compare.</param>
-        private void UpdateBestLap(LapData lapData) {
+        private void UpdateBestLap(Lap lapData) {
             if (lapData.Telemetry != null) {
                 Log(lapData.Telemetry);
             }
@@ -249,10 +249,10 @@ namespace ReHUD.Services {
         /// </summary>
         /// <param name="lapLog">The lap to add.</param>
         /// <returns>True if the added lap is the best lap for the car and track layout, false otherwise.</returns>
-        public LapData LogLap(LapContext context, bool valid, double lapTime) {
+        public Lap LogLap(LapContext context, bool valid, double lapTime) {
             context = AttachContext(context);
 
-            var lap = new LapData(context, valid, lapTime);
+            var lap = new Lap(context, valid, lapTime);
             this.context.Add(lap);
 
             foreach (var p in lap.Pointers) {
@@ -273,7 +273,7 @@ namespace ReHUD.Services {
             return lap;
         }
 
-        public void UpdateLapTime(LapData lap, double lapTime) {
+        public void UpdateLapTime(Lap lap, double lapTime) {
             logger.InfoFormat("Updating lap time for lap {0} to {1}", lap, lapTime);
             lap.LapTime.Value = lapTime;
             context.Update(lap.LapTime);
@@ -281,11 +281,11 @@ namespace ReHUD.Services {
             SaveChanges();
         }
 
-        private static bool ShouldRemoveLapContext(LapContext context, LapData removedLap) {
+        private static bool ShouldRemoveLapContext(LapContext context, Lap removedLap) {
             return context.Entries.Count == 0 || context.Entries.All(l => l == removedLap);
         }
 
-        private static bool ShouldRemoveLap(LapData lap) {
+        private static bool ShouldRemoveLap(Lap lap) {
             return lap.Pointers.TrueForAll(p => p.PendingRemoval);
         }
 
@@ -309,7 +309,7 @@ namespace ReHUD.Services {
         }
 
 
-        private void RemoveLap(LapData lap) {
+        private void RemoveLap(Lap lap) {
             logger.InfoFormat("Removing lap {0}", lap);
 
             // Lap must be removed before pointers otherwise EF will throw an exception (foreign key constraint).

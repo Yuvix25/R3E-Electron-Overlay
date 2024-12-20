@@ -1,5 +1,5 @@
 import HudElement, { Hide } from "./HudElement.js";
-import { Driver, getRaceDeltas, getUid } from "../utils.js";
+import { getRaceDeltas, getUid } from "../utils.js";
 import { EFinishStatus, ESession, IDriverData, ISectors } from "../r3eTypes.js";
 import SettingsValue from "../SettingsValue.js";
 import {
@@ -105,7 +105,7 @@ export default class TvTower extends HudElement {
       }
     }
 
-    if (!valueIsValidAssertUndefined(position) || Driver.mainDriver == null) {
+    if (!valueIsValidAssertUndefined(position)) {
       return this.hide();
     }
 
@@ -202,8 +202,7 @@ export default class TvTower extends HudElement {
         }
 
         const driver = driverData[currentDriverUpdate];
-        const isDriver: boolean =
-          Driver.mainDriver.userId == getUid(driver.driverInfo);
+        const isDriver: boolean = driver === me;
 
         if (mandatoryFirstPlace && currentDriverUpdate == 0) {
           driverElement.style.marginBottom = "10px";
@@ -351,7 +350,7 @@ export default class TvTower extends HudElement {
 
         if (
           deltaString != null &&
-          (Driver.mainDriver.userId !== driver.driverInfo.userId.toString() ||
+          (driver != me ||
             showDeltaForMainDriver)
         ) {
           if (deltaNumber != null)

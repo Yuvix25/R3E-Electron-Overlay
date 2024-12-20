@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ReHUD.Interfaces;
 
 namespace ReHUD.Models.LapData {
     public class LapDataContext : DbContext {
@@ -10,7 +11,7 @@ namespace ReHUD.Models.LapData {
         public DbSet<LapContext> LapContexts { get; set; }
         public DbSet<TireWearContext> TireWearContexts { get; set; }
         public DbSet<FuelUsageContext> FuelUsageContexts { get; set; }
-        public DbSet<LapData> LapDatas { get; set; }
+        public DbSet<Lap> LapDatas { get; set; }
         public DbSet<LapTime> LapTimes { get; set; }
         public DbSet<TireWear> TireWears { get; set; }
         public DbSet<FuelUsage> FuelUsages { get; set; }
@@ -18,6 +19,7 @@ namespace ReHUD.Models.LapData {
 
         private static readonly string DATA_FK = "DataId";
         private static readonly string LAP_CONTEXT_FK = "LapContextId";
+        private static readonly string BEST_LAP_FK = "BestLapId";
         private static readonly string TIRE_WEAR_CONTEXT_FK = "TireWearContextId";
         private static readonly string FUEL_USAGE_CONTEXT_FK = "FuelUsageContextId";
 
@@ -50,11 +52,11 @@ namespace ReHUD.Models.LapData {
 
         protected override void OnModelCreating(ModelBuilder modelBuilder) {
             try {
-                ConfigureContext<LapContext, LapData>(modelBuilder, LAP_CONTEXT_KEYS, LAP_CONTEXT_FK);
+                ConfigureContext<LapContext, Lap>(modelBuilder, LAP_CONTEXT_KEYS, LAP_CONTEXT_FK);
                 ConfigureContext<TireWearContext, TireWear>(modelBuilder, TIRE_WEAR_CONTEXT_KEYS, TIRE_WEAR_CONTEXT_FK);
                 ConfigureContext<FuelUsageContext, FuelUsage>(modelBuilder, FUEL_USAGE_CONTEXT_KEYS, FUEL_USAGE_CONTEXT_FK);
 
-                var lapData = modelBuilder.Entity<LapData>();
+                var lapData = modelBuilder.Entity<Lap>();
                 lapData.HasOne(l => l.LapTime).WithOne(c => c.Lap).HasForeignKey<LapTime>(DATA_FK).IsRequired();
                 lapData.HasOne(l => l.TireWear).WithOne(c => c.Lap).HasForeignKey<TireWear>(DATA_FK).IsRequired(false);
                 lapData.HasOne(l => l.FuelUsage).WithOne(c => c.Lap).HasForeignKey<FuelUsage>(DATA_FK).IsRequired(false);
@@ -65,10 +67,20 @@ namespace ReHUD.Models.LapData {
 
                 var telemetry = modelBuilder.Entity<Telemetry>();
                 telemetry.OwnsOne(t => t.Value);
+
+                var lapContext = modelBuilder.Entity<LapContext>();
+                lapContext.HasOne(c => c.BestLap).WithOne().HasForeignKey<LapContext>(BEST_LAP_FK).IsRequired(false);
             } catch (Exception e) {
                 Console.WriteLine(e);
             }
+        }
 
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.EnableSensitiveDataLogging().UseLazyLoadingProxies().UseSqlite($"Data Source={ILapDataService.DATA_PATH};Mode=ReadWriteCreate");
+            }
         }
     }
 }

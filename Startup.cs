@@ -52,7 +52,12 @@ public class Startup
         app.UseAuthorization();
 
         app.UseEndpoints(endpoints => {
-            endpoints.MapHub<ReHUDHub>("/ReHUDHub");
+            endpoints.MapHub<ReHUDHub>("/ReHUDHub", options => {
+                // Temporary solution for large messages (for example large data points on long tracks).
+                // Ideally we need to move all the point management to the backend.
+                options.TransportMaxBufferSize = 0;
+                options.ApplicationMaxBufferSize = 0;
+            });
             endpoints.MapRazorPages();
         });
 
@@ -140,7 +145,7 @@ public class Startup
     private const string BLACK_OPAQUE = "#FF000000";
     private const string BLACK_TRANSPARENT = "#00000000";
 
-    internal static readonly Settings settings = new();
+    public static readonly Settings settings = new();
 
     private static async Task<BrowserWindow> CreateWindowAsync(BrowserWindowOptions options, string loadUrl = "/") {
         loadUrl = "http://localhost:" + BridgeSettings.WebPort + loadUrl;

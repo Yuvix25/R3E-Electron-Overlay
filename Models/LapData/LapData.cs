@@ -73,7 +73,7 @@ namespace ReHUD.Models.LapData
         public override ICollection<T> Entries { get; } = new List<T>();
     }
 
-    public class LapContext : Context<LapData> {
+    public class LapContext : Context<Lap> {
         private static readonly int MAX_R3E_DATA_ID = 20000;
         private static readonly int MAX_TIRE_COMPOUND = 5;
 
@@ -85,9 +85,8 @@ namespace ReHUD.Models.LapData
         public R3E.Constant.TireSubtype TireCompoundFront { get; set; }
         public R3E.Constant.TireSubtype TireCompoundRear { get; set; }
 
-        public int? BestLapId { get; set; }
-        [NotMapped]
-        public LapData? BestLap { get => Entries.FirstOrDefault(l => l.Id == BestLapId); set => BestLapId = value?.Id; }
+
+        public virtual Lap? BestLap { get; set; }
 
         [NotMapped]
         public IEnumerable<LapTime> LapTimes => Entries.Where(l => l.LapTime != null).Select(l => l.LapTime);
@@ -169,7 +168,7 @@ namespace ReHUD.Models.LapData
         }
     }
 
-    public class LapData : EntityWithGeneratedId, IEntityWithContext<LapContext>
+    public class Lap : EntityWithGeneratedId, IEntityWithContext<LapContext>
     {
         public DateTime Timestamp { get; set; }
         public bool Valid { get; set; }
@@ -228,15 +227,15 @@ namespace ReHUD.Models.LapData
 
 
         [Obsolete("EF Core only")]
-        public LapData() { }
-        public LapData(LapContext context, bool valid, LapTime lapTime)
+        public Lap() { }
+        public Lap(LapContext context, bool valid, LapTime lapTime)
         {
             Timestamp = DateTime.Now;
             Context = context;
             Valid = valid;
             LapTime = lapTime;
         }
-        public LapData(LapContext context, bool valid, double lapTime)
+        public Lap(LapContext context, bool valid, double lapTime)
         {
             Timestamp = DateTime.Now;
             Context = context;
@@ -244,22 +243,11 @@ namespace ReHUD.Models.LapData
             LapTime = new LapTime(this, lapTime);
         }
 
-        public LapData(LapContext context, bool valid, LapTime lapTime, TireWear? tireWear, FuelUsage? fuelUsage, Telemetry? telemetry) : this(context, valid, lapTime)
+        public Lap(LapContext context, bool valid, LapTime lapTime, TireWear? tireWear, FuelUsage? fuelUsage, Telemetry? telemetry) : this(context, valid, lapTime)
         {
             TireWear = tireWear;
             FuelUsage = fuelUsage;
             Telemetry = telemetry;
-        }
-
-        public string SerializeForBestLap()
-        {
-            if (Telemetry == null) return "{}";
-            return JsonConvert.SerializeObject(new
-            {
-                lapTime = LapTime.Value,
-                lapPoints = Telemetry.Value.Points,
-                pointsPerMeter = Telemetry.Value.PointsPerMeter
-            });
         }
 
         public override string ToString()
@@ -272,7 +260,7 @@ namespace ReHUD.Models.LapData
     [NotMapped]
     public abstract class LapPointer : EntityWithGeneratedId
     {
-        public virtual LapData Lap { get; set; }
+        public virtual Lap Lap { get; set; }
         public bool PendingRemoval { get; set; } = false;
 
         [NotMapped]
@@ -281,7 +269,7 @@ namespace ReHUD.Models.LapData
         [Obsolete("EF Core only")]
         protected LapPointer() { }
 
-        protected LapPointer(LapData lap)
+        protected LapPointer(Lap lap)
         {
             Lap = lap;
         }
@@ -294,7 +282,7 @@ namespace ReHUD.Models.LapData
 
         [Obsolete("EF Core only")]
         protected LapPointer() { }
-        protected LapPointer(LapData lap, V value) : base(lap)
+        protected LapPointer(Lap lap, V value) : base(lap)
         {
             Value = value;
         }
@@ -307,7 +295,7 @@ namespace ReHUD.Models.LapData
 
         [Obsolete("EF Core only")]
         protected LapPointerWithContext() { }
-        protected LapPointerWithContext(LapData lap, V value, C context) : base(lap, value)
+        protected LapPointerWithContext(Lap lap, V value, C context) : base(lap, value)
         {
             Context = context;
         }
@@ -316,7 +304,7 @@ namespace ReHUD.Models.LapData
     public class LapTime : LapPointer<double> {
         [Obsolete("EF Core only")]
         public LapTime() { }
-        public LapTime(LapData lap, double value) : base(lap, value) { }
+        public LapTime(Lap lap, double value) : base(lap, value) { }
     }
     
 
@@ -368,7 +356,7 @@ namespace ReHUD.Models.LapData
 
         [Obsolete("EF Core only")]
         public TireWear() { }
-        public TireWear(LapData lap, TireWearObj value, TireWearContext context) : base(lap, value, context) { }
+        public TireWear(Lap lap, TireWearObj value, TireWearContext context) : base(lap, value, context) { }
     }
 
 
@@ -419,13 +407,13 @@ namespace ReHUD.Models.LapData
     public class FuelUsage : LapPointerWithContext<double, FuelUsageContext> {
         [Obsolete("EF Core only")]
         public FuelUsage() { }
-        public FuelUsage(LapData lap, double value, FuelUsageContext context) : base(lap, value, context) { }
+        public FuelUsage(Lap lap, double value, FuelUsageContext context) : base(lap, value, context) { }
     }
 
     public class Telemetry : LapPointer<TelemetryObj> {
         [Obsolete("EF Core only")]
         public Telemetry() { }
-        public Telemetry(LapData lap, TelemetryObj value) : base(lap, value) { }
+        public Telemetry(Lap lap, TelemetryObj value) : base(lap, value) { }
     }
 
 
@@ -510,14 +498,14 @@ namespace ReHUD.Models.LapData
             }
         }
 
-        public double PointsPerMeter { get; set; }
+        public int PointsGap { get; set; }
 
         [Obsolete("EF Core only")]
         public TelemetryObj() { }
-        public TelemetryObj(double[] points, double pointsPerMeter)
+        public TelemetryObj(double[] points, int pointsGap)
         {
             Points = points;
-            PointsPerMeter = pointsPerMeter;
+            PointsGap = pointsGap;
         }
     }
 

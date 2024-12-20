@@ -27,11 +27,19 @@ export interface IExtendedShared {
   tireWearLastLap: ITireData<number>;
   averageLapTime: number;
   bestLapTime: number;
+  sessionBestLapTime: number;
   estimatedRaceLapCount: number;
   lapsUntilFinish: number;
   forceUpdateAll: boolean;
   timestamp: number;
   events: (EventLog | ValueEventLog | DriverEventLog)[];
+  deltasAhead: Record<string, number>;
+  deltasBehind: Record<string, number>;
+  leaderCrossedSFLineAt0: number;
+  deltaToSessionBestLap: number;
+  deltaToBestLap: number;
+  crossedFinishLine: boolean;
+  currentLaptime: number;
 }
 
 /* ========================================== Constants ========================================== */

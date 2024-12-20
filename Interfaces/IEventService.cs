@@ -27,6 +27,7 @@ public interface IEventService
     event EventHandler<BaseEventArgs>? PushToPassReady;
 
     ICollection<EventLog> Cycle(R3EData data);
+    void MainDriverChanged(R3EData data, DriverData driver);
 }
 
 public class BaseEventArgs : EventArgs {

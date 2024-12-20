@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ReHUD.Models.LapData;
 
@@ -10,9 +11,11 @@ using ReHUD.Models.LapData;
 namespace ReHUD.Migrations
 {
     [DbContext(typeof(LapDataContext))]
-    partial class LapDataContextModelSnapshot : ModelSnapshot
+    [Migration("20241214181220_PointGapChange")]
+    partial class PointGapChange
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -64,28 +67,6 @@ namespace ReHUD.Migrations
                     b.ToTable("FuelUsageContexts");
                 });
 
-            modelBuilder.Entity("ReHUD.Models.LapData.Lap", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("LapContextId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("Timestamp")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("Valid")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("LapContextId");
-
-                    b.ToTable("LapDatas");
-                });
-
             modelBuilder.Entity("ReHUD.Models.LapData.LapContext", b =>
                 {
                     b.Property<int>("Id")
@@ -111,12 +92,31 @@ namespace ReHUD.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BestLapId")
-                        .IsUnique();
-
                     b.HasIndex("TrackLayoutId", "CarId", "ClassPerformanceIndex", "TireCompoundFront");
 
                     b.ToTable("LapContexts");
+                });
+
+            modelBuilder.Entity("ReHUD.Models.LapData.LapData", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LapContextId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Valid")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LapContextId");
+
+                    b.ToTable("LapDatas");
                 });
 
             modelBuilder.Entity("ReHUD.Models.LapData.LapTime", b =>
@@ -204,7 +204,7 @@ namespace ReHUD.Migrations
 
             modelBuilder.Entity("ReHUD.Models.LapData.FuelUsage", b =>
                 {
-                    b.HasOne("ReHUD.Models.LapData.Lap", "Lap")
+                    b.HasOne("ReHUD.Models.LapData.LapData", "Lap")
                         .WithOne("FuelUsage")
                         .HasForeignKey("ReHUD.Models.LapData.FuelUsage", "DataId");
 
@@ -219,7 +219,7 @@ namespace ReHUD.Migrations
                     b.Navigation("Lap");
                 });
 
-            modelBuilder.Entity("ReHUD.Models.LapData.Lap", b =>
+            modelBuilder.Entity("ReHUD.Models.LapData.LapData", b =>
                 {
                     b.HasOne("ReHUD.Models.LapData.LapContext", "Context")
                         .WithMany("Entries")
@@ -230,18 +230,9 @@ namespace ReHUD.Migrations
                     b.Navigation("Context");
                 });
 
-            modelBuilder.Entity("ReHUD.Models.LapData.LapContext", b =>
-                {
-                    b.HasOne("ReHUD.Models.LapData.Lap", "BestLap")
-                        .WithOne()
-                        .HasForeignKey("ReHUD.Models.LapData.LapContext", "BestLapId");
-
-                    b.Navigation("BestLap");
-                });
-
             modelBuilder.Entity("ReHUD.Models.LapData.LapTime", b =>
                 {
-                    b.HasOne("ReHUD.Models.LapData.Lap", "Lap")
+                    b.HasOne("ReHUD.Models.LapData.LapData", "Lap")
                         .WithOne("LapTime")
                         .HasForeignKey("ReHUD.Models.LapData.LapTime", "DataId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -252,7 +243,7 @@ namespace ReHUD.Migrations
 
             modelBuilder.Entity("ReHUD.Models.LapData.Telemetry", b =>
                 {
-                    b.HasOne("ReHUD.Models.LapData.Lap", "Lap")
+                    b.HasOne("ReHUD.Models.LapData.LapData", "Lap")
                         .WithOne("Telemetry")
                         .HasForeignKey("ReHUD.Models.LapData.Telemetry", "DataId");
 
@@ -284,7 +275,7 @@ namespace ReHUD.Migrations
 
             modelBuilder.Entity("ReHUD.Models.LapData.TireWear", b =>
                 {
-                    b.HasOne("ReHUD.Models.LapData.Lap", "Lap")
+                    b.HasOne("ReHUD.Models.LapData.LapData", "Lap")
                         .WithOne("TireWear")
                         .HasForeignKey("ReHUD.Models.LapData.TireWear", "DataId");
 
@@ -332,7 +323,12 @@ namespace ReHUD.Migrations
                     b.Navigation("Entries");
                 });
 
-            modelBuilder.Entity("ReHUD.Models.LapData.Lap", b =>
+            modelBuilder.Entity("ReHUD.Models.LapData.LapContext", b =>
+                {
+                    b.Navigation("Entries");
+                });
+
+            modelBuilder.Entity("ReHUD.Models.LapData.LapData", b =>
                 {
                     b.Navigation("FuelUsage");
 
@@ -342,11 +338,6 @@ namespace ReHUD.Migrations
                     b.Navigation("Telemetry");
 
                     b.Navigation("TireWear");
-                });
-
-            modelBuilder.Entity("ReHUD.Models.LapData.LapContext", b =>
-                {
-                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("ReHUD.Models.LapData.TireWearContext", b =>

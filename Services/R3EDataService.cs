@@ -22,6 +22,7 @@ namespace ReHUD.Services
         private readonly ILapDataService lapDataService;
         private readonly IRaceRoomObserver raceRoomObserver;
         private readonly ISharedMemoryService sharedMemoryService;
+        private readonly IDriverService driverService;
 
         private readonly AutoResetEvent resetEvent;
         private CancellationTokenSource cancellationTokenSource = new();
@@ -48,11 +49,12 @@ namespace ReHUD.Services
         private TireWearObj? lastTireWearDiff = null;
         private int? lastLapNum = null;
 
-        public R3EDataService(IEventService eventService, IRaceRoomObserver raceRoomObserver, ISharedMemoryService sharedMemoryService) {
+        public R3EDataService(IEventService eventService, IRaceRoomObserver raceRoomObserver, ISharedMemoryService sharedMemoryService, IDriverService driverService) {
             this.eventService = eventService;
             this.lapDataService = new LapDataService();
             this.raceRoomObserver = raceRoomObserver;
             this.sharedMemoryService = sharedMemoryService;
+            this.driverService = driverService;
 
             extraData = new() {
                 forceUpdateAll = false
@@ -71,7 +73,10 @@ namespace ReHUD.Services
             this.eventService.ExitReplay += (sender, e) => InvalidateLap();
             this.eventService.EnterPitlane += (sender, e) => InvalidateLap();
             this.eventService.ExitPitlane += (sender, e) => InvalidateLap();
-            this.eventService.MainDriverChange += (sender, e) => InvalidateLap();
+            this.eventService.MainDriverChange += (sender, e) => {
+                InvalidateLap();
+                driverService.UpdateBestLap(LoadBestLap());
+            };
         }
 
         public void Dispose() {
@@ -181,7 +186,6 @@ namespace ReHUD.Services
                     extraData.tireWearPerLap = combination.AverageTireWear;
                     extraData.tireWearLastLap = lastTireWearDiff;
                     extraData.averageLapTime = combination.AverageLapTime;
-                    extraData.bestLapTime = combination.BestLapTime;
                     Tuple<int?, double?> lapData = Utilities.GetEstimatedLapCount(dataClone, combination.BestLapTime);
                     extraData.estimatedRaceLapCount = lapData.Item1;
                     extraData.lapsUntilFinish = lapData.Item2;
@@ -210,6 +214,8 @@ namespace ReHUD.Services
                 } catch (Exception e) {
                     logger.Error("Error in event cycle", e);
                 }
+
+                extraData = driverService.ProcessExtraData(extraData);
 
 
                 if (window != null) {
@@ -257,6 +263,8 @@ namespace ReHUD.Services
         }
 
         private void SaveData(object? sender, DriverEventArgs args) {
+            Driver? driver = driverService.NewLap(extraData, args.Driver);
+
             if (!args.IsMainDriver) {
                 return;
             }
@@ -281,7 +289,7 @@ namespace ReHUD.Services
                         double? lapTime = null;
                         if (usingEstimatedLapTime) {
                             lapTime = data.lapTimeCurrentSelf;
-                            logger.DebugFormat("Game did not update laptime yet (currently set to {0}), using estimated laptime {1}", data.lapTimePreviousSelf, lapTime);
+                            logger.InfoFormat("Game did not update laptime yet (currently set to {0}), using estimated laptime {1}", data.lapTimePreviousSelf, lapTime);
                         } else if (data.lapTimePreviousSelf > 0) {
                             lapTime = data.lapTimePreviousSelf;
                         }
@@ -290,7 +298,7 @@ namespace ReHUD.Services
                             var savedTransaction = false;
                             var transaction = lapDataService.BeginTransaction();
                             try {
-                                LapData lap = lapDataService.LogLap(context, lapValid, lapTime.Value);
+                                Lap lap = lapDataService.LogLap(context, lapValid, lapTime.Value);
                                 lapSaved = true;
                                 extraData.lapId = lap.Id;
                                 extraData.lastLapTime = lapTime;
@@ -301,6 +309,10 @@ namespace ReHUD.Services
 
                                 if (fuelDataValid && data.fuelUseActive >= 1) {
                                     lapDataService.Log(new FuelUsage(lap, fuelDiff!.Value, new FuelUsageContext(data.fuelUseActive)));
+                                }
+
+                                if (driver != null) {
+                                    SaveBestLap(lap, driver.BestLap!.GetNonNullPoints(), Driver.DATA_POINTS_GAP);
                                 }
 
                                 // Commit async to not block the thread.
@@ -373,32 +385,22 @@ namespace ReHUD.Services
             enteredEditMode = true;
         }
 
-        public void SaveBestLap(int lapId, double[] points, double pointsPerMeter) {
-            var innerLapDataService = new LapDataService(); // Create a new one because we're in a different thread
-            LapData? lap = innerLapDataService.GetLap(lapId);
-            if (lap == null) {
-                logger.WarnFormat("SaveBestLap: lapId={0} not found", lapId);
-                return;
-            }
-            logger.InfoFormat("SaveBestLap: lapId={0}, trackLayoutId={1}, carId={2}, classPerformanceIndex={3}", lapId, lap.Context.TrackLayoutId, lap.Context.CarId, lap.Context.ClassPerformanceIndex);
+        public void SaveBestLap(Lap lap, double[] points, int pointsGap) {
+            logger.InfoFormat("SaveBestLap: lapId={0}, trackLayoutId={1}, carId={2}, classPerformanceIndex={3}", lap.Id, lap.Context.TrackLayoutId, lap.Context.CarId, lap.Context.ClassPerformanceIndex);
 
-            Telemetry telemetry = new(lap, new(points, pointsPerMeter));
-            innerLapDataService.Log(telemetry);
+            Telemetry telemetry = new(lap, new(points, pointsGap));
+            lapDataService.Log(telemetry);
         }
 
-        public string LoadBestLap() {
+        public Lap? LoadBestLap() {
             var layoutId = data.layoutId;
             var carId = data.vehicleInfo.modelId;
             var classPerformanceIndex = data.vehicleInfo.classPerformanceIndex;
-            var tireSubtypeFront = (Constant.TireSubtype)data.tireSubtypeFront;
-            var tireSubtypeRear = (Constant.TireSubtype)data.tireSubtypeRear;
+            var tireSubtypeFront = (Constant.TireSubtype) data.tireSubtypeFront;
+            var tireSubtypeRear = (Constant.TireSubtype) data.tireSubtypeRear;
 
             var innerLapDataService = new LapDataService(); // Create a new one because we're in a different thread
-            LapData? lap = innerLapDataService.GetClassBestLap(layoutId, carId, classPerformanceIndex, tireSubtypeFront, tireSubtypeRear);
-            if (lap == null) {
-                return "{}";
-            }
-            return lap.SerializeForBestLap();
+            return innerLapDataService.GetClassBestLap(layoutId, carId, classPerformanceIndex, tireSubtypeFront, tireSubtypeRear);
         }
 
         public async Task SendEmptyData() {

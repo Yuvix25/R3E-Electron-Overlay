@@ -58,6 +58,7 @@ public static class Program
                 services.AddSingleton<IProcessObserverFactory, ProcessObserverFactory>();
                 services.AddSingleton<IRaceRoomObserver, RaceRoomObserver>();
                 services.AddSingleton<ISharedMemoryService, SharedMemoryService>();
+                services.AddSingleton<IDriverService, DriverService>();
                 services.AddSingleton<IR3EDataService, R3EDataService>();
             });
 }

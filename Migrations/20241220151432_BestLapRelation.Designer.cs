@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ReHUD.Models.LapData;
 
@@ -10,9 +11,11 @@ using ReHUD.Models.LapData;
 namespace ReHUD.Migrations
 {
     [DbContext(typeof(LapDataContext))]
-    partial class LapDataContextModelSnapshot : ModelSnapshot
+    [Migration("20241220151432_BestLapRelation")]
+    partial class BestLapRelation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

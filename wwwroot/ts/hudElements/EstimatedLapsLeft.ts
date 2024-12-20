@@ -1,14 +1,14 @@
 import HudElement, {Hide} from "./HudElement.js";
 import {valueIsValidAssertUndefined, NA, finished, valuesAreValid, IExtendedShared} from "../consts.js";
-import IShared, {EFinishStatus, ESession, IDriverData} from "../r3eTypes.js";
+import {EFinishStatus, ESession, IDriverData} from "../r3eTypes.js";
 import {SharedMemoryKey} from '../SharedMemoryConsumer.js';
 
 export default class EstimatedLapsLeft extends HudElement {
-    override sharedMemoryKeys: SharedMemoryKey[] = ['sessionType', 'finishStatus', 'completedLaps', 'lapDistanceFraction', 'sessionLengthFormat', '+estimatedRaceLapCount'];
+    override sharedMemoryKeys: SharedMemoryKey[] = ['sessionType', 'finishStatus', 'completedLaps', 'lapDistanceFraction', 'sessionLengthFormat', '+estimatedRaceLapCount', '+leaderCrossedSFLineAt0'];
 
     private crossedFinishLine: number = 0;
 
-    protected override render(sessionType: ESession, finishStatus: EFinishStatus, completedLaps: number, fraction: number, sessionLengthFormat: number, totalLaps: number): string | Hide {
+    protected override render(sessionType: ESession, finishStatus: EFinishStatus, completedLaps: number, fraction: number, sessionLengthFormat: number, totalLaps: number, leaderCrossedSFLineAt0: number): string | Hide {
         if (sessionType !== ESession.Race || !valuesAreValid(totalLaps, sessionLengthFormat) || finished(finishStatus)) {
             return this.hide(NA);
         }
@@ -26,7 +26,7 @@ export default class EstimatedLapsLeft extends HudElement {
         }
         completedLaps = Math.max(completedLaps, 0);
 
-        if (sessionLengthFormat === 2 && this.hud.driverManagerService.leaderCrossedSFLineAt0 === 1) {
+        if (sessionLengthFormat === 2 && leaderCrossedSFLineAt0 === 1) {
             totalLaps--;
         }
 

@@ -1,7 +1,7 @@
 import HudElement, {Hide} from "./HudElement.js";
 import {laptimeFormat, valueIsValidAssertUndefined, validNumberOrDefault, nameFormat, getClassColors, POSITION_BAR_CELL_COUNT} from "../consts.js";
 import {EFinishStatus, ESession, IDriverData, ISectors} from "../r3eTypes.js";
-import {Driver, getRaceDeltas, getUid} from "../utils.js";
+import {getRaceDeltas, getUid} from "../utils.js";
 import SettingsValue from "../SettingsValue.js";
 import {SharedMemoryKey} from '../SharedMemoryConsumer.js';
 
@@ -51,7 +51,7 @@ export default class PositionBar extends HudElement {
             }
         }
 
-        if (!valueIsValidAssertUndefined(position) || Driver.mainDriver == null) {
+        if (!valueIsValidAssertUndefined(position)) {
             return this.hide();
         }
 
@@ -95,7 +95,7 @@ export default class PositionBar extends HudElement {
                 positionElement.style.backgroundColor = classColors.get(driver.driverInfo.classPerformanceIndex);
                 positionElement.textContent = driver.placeClass.toString();
 
-                if (Driver.mainDriver.userId === uid) {
+                if (driver === me) {
                     positionBarCell.style.backgroundColor = 'rgba(255, 255, 0, 0.4)';
                 } else {
                     positionBarCell.style.backgroundColor = null;
@@ -162,7 +162,7 @@ export default class PositionBar extends HudElement {
                     timeElement.textContent = '';
                 }
 
-                if (deltaString != null && (Driver.mainDriver.userId !== uid || showDeltaForMainDriver)) {
+                if (deltaString != null && (driver !== me || showDeltaForMainDriver)) {
                     if (deltaNumber != null) deltaString = deltaNumber > 0 ? `+${deltaString}` : deltaString;
 
                     deltaElement.textContent = deltaString;
