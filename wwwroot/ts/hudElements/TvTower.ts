@@ -1,5 +1,5 @@
 import HudElement, { Hide } from "./HudElement.js";
-import { Driver, getRaceDeltas, getUid } from "../utils.js";
+import { getRaceDeltas, getUid } from "../utils.js";
 import { EFinishStatus, ESession, IDriverData, ISectors } from "../r3eTypes.js";
 import SettingsValue from "../SettingsValue.js";
 import {
@@ -11,12 +11,13 @@ import {
   TV_TOWER_MAX_SIZE_SETTING,
   TV_TOWER_RANKED_DATA,
   validNumberOrDefault,
-  valueIsValidAssertNull,
+  valueIsValidAssertUndefined,
 } from "../consts.js";
 import RankedData from "../actions/RankedData.js";
+import {SharedMemoryKey} from '../SharedMemoryConsumer.js';
 
 export default class TvTower extends HudElement {
-  override sharedMemoryKeys: string[] = [
+  override sharedMemoryKeys: SharedMemoryKey[] = [
     "driverData",
     "position",
     "sessionType",
@@ -24,7 +25,7 @@ export default class TvTower extends HudElement {
   ];
 
   public static readonly IMAGE_REDIRECT =
-    "https://game.raceroom.com/store/image_redirect?id=";
+    "https://game.raceroom.com/store/image_redirect?size=thumb&id=";
 
   private rankedData: RankedData = null;
 
@@ -104,7 +105,7 @@ export default class TvTower extends HudElement {
       }
     }
 
-    if (!valueIsValidAssertNull(position) || Driver.mainDriver == null) {
+    if (!valueIsValidAssertUndefined(position)) {
       return this.hide();
     }
 
@@ -201,8 +202,7 @@ export default class TvTower extends HudElement {
         }
 
         const driver = driverData[currentDriverUpdate];
-        const isDriver: boolean =
-          Driver.mainDriver.userId == getUid(driver.driverInfo);
+        const isDriver: boolean = driver === me;
 
         if (mandatoryFirstPlace && currentDriverUpdate == 0) {
           driverElement.style.marginBottom = "10px";
@@ -255,8 +255,8 @@ export default class TvTower extends HudElement {
           TV_TOWER_CAR_LOGO_OR_LIVERY_SETTING == "livery";
 
         const imageSrc = liverySettingTrue
-          ? `url("${TvTower.IMAGE_REDIRECT + liveryId + "&size=thumb"}")`
-          : `url("${TvTower.IMAGE_REDIRECT + manufacturerId + "&size=thumb"}")`;
+          ? `url("${TvTower.IMAGE_REDIRECT + liveryId}")`
+          : `url("${TvTower.IMAGE_REDIRECT + manufacturerId}")`;
 
         carImageElement.style.backgroundImage = imageSrc;
         if (liverySettingTrue) {
@@ -291,7 +291,7 @@ export default class TvTower extends HudElement {
         switch (sessionType) {
           case ESession.Race:
             time = driver.sectorTimePreviousSelf.sector3;
-            if (valueIsValidAssertNull(time)) {
+            if (valueIsValidAssertUndefined(time)) {
               if (time <= sessionBestSectors.sector3) {
                 timeColor = "var(--time-purple)";
               } else if (time <= driver.sectorTimeBestSelf.sector3) {
@@ -334,7 +334,7 @@ export default class TvTower extends HudElement {
           case ESession.Practice:
           case ESession.Warmup:
             time = driver.sectorTimeBestSelf.sector3;
-            if (myTime != null && valueIsValidAssertNull(time)) {
+            if (myTime != null && valueIsValidAssertUndefined(time)) {
               deltaNumber = time - myTime;
               deltaString = laptimeFormat(deltaNumber, true);
             }
@@ -350,7 +350,7 @@ export default class TvTower extends HudElement {
 
         if (
           deltaString != null &&
-          (Driver.mainDriver.userId !== driver.driverInfo.userId.toString() ||
+          (driver != me ||
             showDeltaForMainDriver)
         ) {
           if (deltaNumber != null)
