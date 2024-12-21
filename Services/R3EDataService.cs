@@ -215,7 +215,11 @@ namespace ReHUD.Services
                     logger.Error("Error in event cycle", e);
                 }
 
-                extraData = driverService.ProcessExtraData(extraData);
+                try {
+                    extraData = driverService.ProcessExtraData(extraData);
+                } catch (Exception e) {
+                    logger.Error("Error in driver service", e);
+                }
 
 
                 if (window != null) {
@@ -224,8 +228,7 @@ namespace ReHUD.Services
                         await IpcCommunication.Invoke(window, "r3eData", extraData.Serialize(usedKeys));
                         extraData.forceUpdateAll = false;
                         enteredEditMode = false;
-                    }
-                    else {
+                    } else {
                         await IpcCommunication.Invoke(window, "r3eData", extraData.Serialize(usedKeys));
                     }
                 }

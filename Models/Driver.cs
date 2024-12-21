@@ -176,7 +176,9 @@ public class Driver {
 
     public bool EndLap(double? laptime, double timeNow, int completedLaps, R3E.Constant.Session session, bool? safeMode) {
         try {
-            logger.DebugFormat("Ending lap for {0}. Laptime: {1}, Completed laps: {2}", uid, laptime, completedLaps);
+            if (IsMainDriver()) {
+                logger.DebugFormat("Ending lap for {0}. Laptime: {1}, Completed laps: {2}", uid, laptime, completedLaps);
+            }
 
             bool shouldSaveBestLap = false;
 
@@ -253,7 +255,7 @@ public class Driver {
             return 0;
         }
 
-        if ((IsMainDriver() || driverAhead.IsMainDriver()) && mainDriver.BestLap != null) {
+        if ((IsMainDriver() || driverAhead.IsMainDriver()) && mainDriver!.BestLap != null) {
             double? res = mainDriver.CalculateDeltaBasedOnBestLap(index, aheadIndex);
             if (res != null) {
                 return res;
@@ -287,7 +289,11 @@ public class Driver {
         return CalculateDelta(dataPoints, index1, index2);
     }
 
-    private double? CalculateDelta(DataPoints points, int indexBehind, int indexAhead) {
+    private double? CalculateDelta(DataPoints? points, int indexBehind, int indexAhead) {
+        if (points == null) {
+            return null;
+        }
+
         double? res = points.CalculateTimeDifference(indexBehind, indexAhead);
 
         if (res != null) {
