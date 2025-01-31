@@ -1,11 +1,12 @@
 import HudElement from "./HudElement.js";
-import {NA, allValuesAreValid, lerpRGB} from "../consts.js";
+import {NA, valuesAreValid, lerpRGB} from "../consts.js";
+import {SharedMemoryKey} from '../SharedMemoryConsumer.js';
 
 export default class FuelLastLap extends HudElement {
-    override sharedMemoryKeys: string[] = ['+fuelLastLap', '+fuelPerLap'];
+    override sharedMemoryKeys: SharedMemoryKey[] = ['+fuelLastLap', '+fuelPerLap'];
 
     protected override render(fuelLastLap: number, fuelPerLap: number): string {
-        if (!allValuesAreValid(fuelLastLap, fuelPerLap)) {
+        if (!valuesAreValid(fuelLastLap, fuelPerLap)) {
             this.root.style.setProperty('--fuel-last-lap-color', 'var(--fuel-middle-color)');
             return NA;
         }

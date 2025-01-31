@@ -1,10 +1,12 @@
 ﻿using ElectronNET.API;
 using ElectronNET.API.Entities;
 using log4net;
+using R3E;
 using R3E.Data;
 using ReHUD.Extensions;
 using ReHUD.Interfaces;
 using ReHUD.Models;
+using ReHUD.Models.LapData;
 using ReHUD.Utils;
 
 namespace ReHUD.Services
@@ -15,11 +17,12 @@ namespace ReHUD.Services
 
         private R3EData data;
         private R3EExtraData extraData;
-        private readonly FuelData fuelData;
-        private readonly LapPointsData lapPointsData;
 
+        private readonly IEventService eventService;
+        private readonly ILapDataService lapDataService;
         private readonly IRaceRoomObserver raceRoomObserver;
         private readonly ISharedMemoryService sharedMemoryService;
+        private readonly IDriverService driverService;
 
         private readonly AutoResetEvent resetEvent;
         private CancellationTokenSource cancellationTokenSource = new();
@@ -28,8 +31,6 @@ namespace ReHUD.Services
         public bool IsRunning { get => _isRunning; }
 
         public R3EExtraData Data { get => extraData; }
-        public FuelData FuelData { get => fuelData; }
-        public LapPointsData LapPointsData { get => lapPointsData; }
 
         private BrowserWindow window;
         public BrowserWindow HUDWindow { get => window; set => window = value; }
@@ -38,37 +39,44 @@ namespace ReHUD.Services
         private string[]? usedKeys;
         public string[]? UsedKeys { get => usedKeys; set => usedKeys = value; }
 
-        private volatile bool enteredEditMode = false;
-        private volatile bool recordingData = false;
-        private double lastFuel = -1;
-        private volatile int lastLap = -1;
+        private bool enteredEditMode = false;
+        private bool recordingData = false;
+        private bool lapValid = false;
+        private DateTime lastLapInvalidation = DateTime.MinValue;
+        private float? lastFuel = null;
+        private float? lastFuelUsage = null;
+        private TireWearObj? lastTireWear = null;
+        private TireWearObj? lastTireWearDiff = null;
+        private int? lastLapNum = null;
 
-        public R3EDataService(IRaceRoomObserver raceRoomObserver, ISharedMemoryService sharedMemoryService) {
+        public R3EDataService(IEventService eventService, IRaceRoomObserver raceRoomObserver, ISharedMemoryService sharedMemoryService, IDriverService driverService) {
+            this.eventService = eventService;
+            this.lapDataService = new LapDataService();
             this.raceRoomObserver = raceRoomObserver;
             this.sharedMemoryService = sharedMemoryService;
+            this.driverService = driverService;
 
             extraData = new() {
                 forceUpdateAll = false
             };
-            fuelData = new();
-            lapPointsData = new();
 
             resetEvent = new AutoResetEvent(false);
 
             this.raceRoomObserver.OnProcessStarted += RaceRoomStarted;
             this.raceRoomObserver.OnProcessStopped += RaceRoomStopped;
 
-            sharedMemoryService.OnDataReady += OnDataReady;
-        }
-
-        public void Load() {
-            fuelData.Load();
-            lapPointsData.Load();
-        }
-
-        public void Save() {
-            fuelData.Save();
-            lapPointsData.Save();
+            this.sharedMemoryService.OnDataReady += OnDataReady;
+            this.eventService.NewLap += SaveData;
+            this.eventService.PositionJump += InvalidateLapDriver;
+            this.eventService.EnterPitlane += InvalidateLapDriver;
+            this.eventService.ExitPitlane += InvalidateLapDriver;
+            this.eventService.SessionChange += (sender, e) => InvalidateLap();
+            this.eventService.EnterReplay += (sender, e) => InvalidateLap();
+            this.eventService.ExitReplay += (sender, e) => InvalidateLap();
+            this.eventService.MainDriverChange += (sender, e) => {
+                InvalidateLap();
+                driverService.UpdateBestLap(LoadBestLap());
+            };
         }
 
         public void Dispose() {
@@ -102,152 +110,286 @@ namespace ReHUD.Services
             resetEvent.Set();
         }
 
+
+        private void SetRecordingData() {
+            if (!recordingData) {
+                logger.Info("Recording data");
+                recordingData = true;
+            }
+        }
+
+        private void ResetRecordingData() {
+            if (recordingData) {
+                logger.Info("Stopped recording data");
+                recordingData = false;
+                lapValid = false;
+            }
+        }
+
+
+        private void ForceSetLapValid() {
+            if (!lapValid) {
+                logger.Info("Setting lap valid");
+                lapValid = true;
+            }
+        }
+
+        private void GraceSetLapValid() {
+            if (DateTime.UtcNow - lastLapInvalidation < TimeSpan.FromSeconds(5)) {
+                ForceSetLapValid();
+            }
+        }
+
+        private void ResetLapValid() {
+            if (lapValid) {
+                logger.Info("Setting lap invalid");
+                lapValid = false;
+                lastLapInvalidation = DateTime.UtcNow;
+            }
+        }
+
+        private void InvalidateLap() {
+            ResetRecordingData();
+            ResetLapValid();
+        }
+
+        private void InvalidateLapDriver(object? sender, DriverEventArgs driver) {
+            if (driver.IsMainDriver) {
+                InvalidateLap();
+            }
+        }
+
+        public static readonly TimeSpan UPDATE_COMBINATION_SUMMARY_EVERY = TimeSpan.FromMilliseconds(300);
+
         private async Task ProcessR3EData(CancellationToken cancellationToken) {
             logger.Info("Starting R3EDataService worker");
 
-            int iter = 0;
-            var userDataClearedForMultiplier = false;
-
+            var lastCombinationSummaryUpdate = DateTime.UtcNow - TimeSpan.FromMinutes(1);
             while (!cancellationToken.IsCancellationRequested) {
                 resetEvent.WaitOne();
                 resetEvent.Reset();
 
                 extraData.timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                if (data.fuelUseActive != 1 && !userDataClearedForMultiplier) {
-                    userDataClearedForMultiplier = true;
-                    fuelData.Save();
-                    fuelData.Clear();
-                }
-                else if (data.fuelUseActive == 1 && userDataClearedForMultiplier) {
-                    userDataClearedForMultiplier = false;
-                    fuelData.Clear();
-                    fuelData.Load();
-                }
 
-                extraData.rawData = data;
-                extraData.rawData.numCars = Math.Max(data.numCars, data.position); // Bug in shared memory, sometimes numCars is updated in delay, this partially fixes it
-                extraData.rawData.driverData = extraData.rawData.driverData.Take(extraData.rawData.numCars).ToArray();
-                if (data.layoutId != -1 && data.vehicleInfo.modelId != -1 && iter % sharedMemoryService.FrameRate == 0) {
-                    FuelCombination combination = fuelData.GetCombination(data.layoutId, data.vehicleInfo.modelId);
-                    extraData.fuelPerLap = combination.GetAverageFuelUsage();
-                    extraData.fuelLastLap = combination.GetLastLapFuelUsage();
-                    extraData.averageLapTime = combination.GetAverageLapTime();
-                    extraData.bestLapTime = combination.GetBestLapTime();
-                    Tuple<int, double> lapData = Utilities.GetEstimatedLapCount(data, combination);
+
+                var dataClone = data; // Clone the struct to avoid collisions with the shared memory service.
+
+                // Bug in shared memory, sometimes numCars is updated in delay, this partially fixes it.
+                dataClone.numCars = Math.Max(dataClone.numCars, dataClone.position);
+                var firstEmptyIndex = Array.FindIndex(dataClone.driverData, d => d.driverInfo.slotId == -1);
+                if (firstEmptyIndex != -1) {
+                    dataClone.numCars = Math.Min(dataClone.numCars, firstEmptyIndex);
+                }
+                dataClone.driverData = dataClone.driverData.Take(dataClone.numCars).ToArray();
+                var utcNow = DateTime.UtcNow;
+                if (dataClone.layoutId != -1 && dataClone.vehicleInfo.modelId != -1 && utcNow - lastCombinationSummaryUpdate > UPDATE_COMBINATION_SUMMARY_EVERY) {
+                    var tireSubtypeFront = (Constant.TireSubtype)dataClone.tireSubtypeFront;
+                    var tireSubtypeRear = (Constant.TireSubtype)dataClone.tireSubtypeRear;
+                    lastCombinationSummaryUpdate = utcNow;
+                    CombinationSummary combination = lapDataService.GetCombinationSummary(dataClone.layoutId, dataClone.vehicleInfo.modelId, tireSubtypeFront, tireSubtypeRear);
+                    extraData.fuelPerLap = combination.AverageFuelUsage;
+                    extraData.fuelLastLap = lastFuelUsage;
+                    extraData.tireWearPerLap = combination.AverageTireWear;
+                    extraData.tireWearLastLap = lastTireWearDiff;
+                    extraData.averageLapTime = combination.AverageLapTime;
+                    Tuple<int?, double?> lapData = Utilities.GetEstimatedLapCount(dataClone, combination.BestLapTime);
                     extraData.estimatedRaceLapCount = lapData.Item1;
                     extraData.lapsUntilFinish = lapData.Item2;
-                    iter = 0;
+                    var bestLap = lapDataService.GetCarBestLap(dataClone.layoutId, dataClone.vehicleInfo.modelId, tireSubtypeFront, tireSubtypeRear);
+                    if (bestLap == null) {
+                        extraData.allTimeBestLapTime = null;
+                    } else {
+                        extraData.allTimeBestLapTime = bestLap.LapTime.Value;
+                    }
                 }
-                iter++;
+                extraData.rawData = dataClone;
 
-                Func<Task> saveDataTask = () => {
-                    try {
-                        SaveData(data);
-                    }
-                    catch (Exception e) {
-                        logger.Error("Error saving data", e);
-                    }
-                    return Task.CompletedTask;
-                };
+                if (dataClone.gameInReplay == 1 || dataClone.inPitlane == 1) {
+                    ResetRecordingData();
+                }
 
-                Func<Task> updateHUDTask = async () => {
+                if (data.currentLapValid == 0) {
+                    ResetLapValid();
+                } else {
+                    // currentLapValid is sometimes updated after the new lap event, so we need to be able to re-validate it.
+                    GraceSetLapValid();
+                }
+
+                try {
+                    extraData.events = eventService.Cycle(dataClone);
+                } catch (Exception e) {
+                    logger.Error("Error in event cycle", e);
+                }
+
+                try {
+                    extraData = driverService.ProcessExtraData(extraData);
+                } catch (Exception e) {
+                    logger.Error("Error in driver service", e);
+                }
+
+
+                if (window != null) {
                     if (enteredEditMode) {
                         extraData.forceUpdateAll = true;
                         await IpcCommunication.Invoke(window, "r3eData", extraData.Serialize(usedKeys));
                         extraData.forceUpdateAll = false;
                         enteredEditMode = false;
-                    }
-                    else {
+                    } else {
                         await IpcCommunication.Invoke(window, "r3eData", extraData.Serialize(usedKeys));
                     }
-                };
+                }
 
-                Func<Task> updateHUDStateTask = async () => {
-                    bool notDriving = data.IsNotDriving();
-                    if (notDriving) {
-                        if (window != null && (hudShown ?? true)) {
-                            Electron.IpcMain.Send(window, "hide");
-                            hudShown = false;
-                        }
-
-                        recordingData = false;
-
-                        if (data.sessionType == -1) {
-                            lastLap = -1;
-                            lastFuel = -1;
-                        }
+                if (dataClone.IsInMenus()) {
+                    if (window != null && (hudShown ?? true)) {
+                        Electron.IpcMain.Send(window, "hide");
+                        hudShown = false;
                     }
-                    else if (window != null && !(hudShown ?? false)) {
-                        Electron.IpcMain.Send(window, "show");
-                        window.SetAlwaysOnTop(!Startup.IsInVrMode, OnTopLevel.screenSaver);
-                        hudShown = true;
+
+                    if (dataClone.sessionType == -1) {
+                        lastLapNum = null;
+                        lastFuel = null;
+                        lastTireWear = null;
                     }
-                };
+                } else if (window != null && !(hudShown ?? false)) {
+                    Electron.IpcMain.Send(window, "show");
+                    window.SetAlwaysOnTop(!Startup.IsInVrMode, OnTopLevel.screenSaver);
+                    hudShown = true;
+                }
 
-                await Task.WhenAll(saveDataTask(), updateHUDTask(), updateHUDStateTask());
-
-                lastLap = data.completedLaps;
+                lastLapNum = dataClone.completedLaps;
             }
 
             logger.Info("R3EDataService worker thread stopped");
         }
 
-        private void SaveData(R3EData data) {
-            if (lastLap == -1 || lastLap == data.completedLaps || fuelData == null) {
+        private static TireWearObj AsTireWear(TireData<float> tireWear) {
+            return new TireWearObj {
+                FrontLeft = tireWear.frontLeft,
+                FrontRight = tireWear.frontRight,
+                RearLeft = tireWear.rearLeft,
+                RearRight = tireWear.rearRight,
+            };
+        }
+
+        private void SaveData(object? sender, DriverEventArgs args) {
+            Tuple<Driver, bool>? res = driverService.NewLap(extraData, args.Driver);
+
+            if (!args.IsMainDriver || res == null) {
                 return;
             }
 
-            if (!recordingData) {
-                recordingData = true;
-                lastFuel = data.fuelLeft;
-                return;
+            float? fuelNow = data.vehicleInfo.engineType == 1 ? data.batterySoC : data.fuelLeft;
+            fuelNow = fuelNow == -1 ? null : fuelNow;
+            TireWearObj tireWearNow = AsTireWear(data.tireWear);
+            bool lapSaved = false;
+
+            try {
+                double? laptime = res.Item1.GetLastLaptime();
+                if (laptime == null) {
+                    logger.Error("Last lap was abnormal, not saving lap");
+                    return;
+                }
+
+                if (recordingData) {
+                    bool tireWearDataValid = lastTireWear != null && tireWearNow != null;
+                    TireWearObj? tireWearDiff = tireWearDataValid ? lastTireWear! - tireWearNow! : null;
+
+                    bool fuelDataValid = lastFuel != null && fuelNow != -1;
+                    float? fuelDiff = fuelDataValid ? lastFuel - fuelNow : null;
+
+                    if (lapValid) {
+                        LapContext context = new(data.layoutId, data.vehicleInfo.modelId, data.vehicleInfo.classPerformanceIndex, data.tireSubtypeFront, data.tireSubtypeRear);
+                        if (laptime != null) {
+                            var savedTransaction = false;
+                            var transaction = lapDataService.BeginTransaction();
+                            try {
+                                Lap lap = lapDataService.LogLap(context, lapValid, laptime.Value);
+                                lapSaved = true;
+                                extraData.lapId = lap.Id;
+                                extraData.lastLapTime = laptime;
+
+                                if (tireWearDataValid && data.tireWearActive >= 1) {
+                                    lapDataService.Log(new TireWear(lap, tireWearDiff!, new TireWearContext(data.tireWearActive)));
+                                }
+
+                                if (fuelDataValid && data.fuelUseActive >= 1) {
+                                    lapDataService.Log(new FuelUsage(lap, fuelDiff!.Value, new FuelUsageContext(data.fuelUseActive)));
+                                }
+
+                                if (res.Item2) {
+                                    SaveBestLap(lap, res.Item1.BestLap!.GetNonNullPoints(), Driver.DATA_POINTS_GAP);
+                                }
+
+                                // Commit async to not block the thread.
+                                // This is safe because this method is only called when a lap is completed, so there's plenty of time between calls.
+                                // TODO: Maybe move this to a separate thread with a queue?
+                                transaction.CommitAsync();
+                                savedTransaction = true;
+                            } catch (Exception e) {
+                                logger.Error("Error saving lap", e);
+                            } finally {
+                                if (!savedTransaction) {
+                                    transaction.Rollback();
+                                }
+                                transaction.Dispose();
+                            }
+                        } else {
+                            logger.Error("No valid laptime found, not saving lap");
+                            extraData.lapId = null;
+                        }
+                    } else {
+                        logger.Info("Lap not valid, not saving lap");
+                    }
+
+                    if (data.tireWearActive >= 1) {
+                        lastTireWearDiff = tireWearDiff;
+                    }
+                    if (data.fuelUseActive >= 1) {
+                        lastFuelUsage = fuelDiff;
+                    }
+                }
+            } finally {
+                if (data.IsDriving()) {
+                    // First race lap should not be saved because it starts from the grid.
+                    if (data.sessionType != (int)Constant.Session.Race || data.completedLaps > 0) {
+                        SetRecordingData();
+                    }
+                    ForceSetLapValid();
+                    lastFuel = fuelNow;
+                    lastTireWear = tireWearNow;
+                }
+
+                if (!lapSaved) {
+                    extraData.lapId = null;
+                }
             }
-
-            var fuelNow = data.vehicleInfo.engineType == 1 ? data.batterySoC : data.fuelLeft;
-
-            int modelId = data.vehicleInfo.modelId;
-            int layoutId = data.layoutId;
-            FuelCombination combo = fuelData.GetCombination(layoutId, modelId);
-
-            if (data.lapTimePreviousSelf > 0)
-                combo.AddLapTime(data.lapTimePreviousSelf);
-
-            if (data.fuelUseActive >= 1 && lastFuel != -1) {
-                combo.AddFuelUsage(lastFuel - fuelNow, data.lapTimePreviousSelf > 0);
-            }
-
-            if (data.fuelUseActive <= 1)
-                fuelData.Save();
-
-            lastFuel = fuelNow;
         }
 
         public void SetEnteredEditMode() {
             enteredEditMode = true;
         }
 
-        public void SaveBestLap(int layoutId, int classId, double laptime, double[] points, double pointsPerMeter) {
-            LapPointsCombination combination = lapPointsData.GetCombination(layoutId, classId);
-            combination.Set(laptime, points, pointsPerMeter);
+        public void SaveBestLap(Lap lap, double[] points, int pointsGap) {
+            logger.InfoFormat("SaveBestLap: lapId={0}, trackLayoutId={1}, carId={2}, classPerformanceIndex={3}", lap.Id, lap.Context.TrackLayoutId, lap.Context.CarId, lap.Context.ClassPerformanceIndex);
 
-            lapPointsData.Save();
+            Telemetry telemetry = new(lap, new(points, pointsGap));
+            lapDataService.Log(telemetry);
         }
-        public string LoadBestLap(int layoutId, int classId) {
-            LapPointsCombination? combination = lapPointsData.GetCombination(layoutId, classId, false);
-            if (combination == null)
-                return "{}";
-            return combination.Serialize();
+
+        public Lap? LoadBestLap() {
+            var layoutId = data.layoutId;
+            var carId = data.vehicleInfo.modelId;
+            var classPerformanceIndex = data.vehicleInfo.classPerformanceIndex;
+            var tireSubtypeFront = (Constant.TireSubtype) data.tireSubtypeFront;
+            var tireSubtypeRear = (Constant.TireSubtype) data.tireSubtypeRear;
+
+            var innerLapDataService = new LapDataService(); // Create a new one because we're in a different thread
+            return innerLapDataService.GetClassBestLap(layoutId, carId, classPerformanceIndex, tireSubtypeFront, tireSubtypeRear);
         }
 
         public async Task SendEmptyData() {
-            var emptyData = new R3EExtraData {
-                forceUpdateAll = true,
-                rawData = new R3EData {
-                    driverData = Array.Empty<DriverData>(),
-                },
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            };
             logger.Info("Sending empty data for edit mode");
+            var emptyData = R3EExtraData.NewEmpty();
             await IpcCommunication.Invoke(window, "r3eData", emptyData.Serialize(usedKeys));
         }
     }

@@ -1,15 +1,16 @@
 import HudElement from "./HudElement.js";
-import {NA, lerpRGB, valueIsValidAssertNull} from "../consts.js";
+import {NA, lerpRGB, valueIsValidAssertUndefined} from "../consts.js";
 import {EEngineType, IDriverInfo} from '../r3eTypes.js';
+import {SharedMemoryKey} from '../SharedMemoryConsumer.js';
 
 export default class FuelLapsLeft extends HudElement {
-    override sharedMemoryKeys: string[] = ['vehicleInfo', 'fuelLeft', 'batterySoC', '+fuelPerLap'];
+    override sharedMemoryKeys: SharedMemoryKey[] = ['vehicleInfo', 'fuelLeft', 'batterySoC', '+fuelPerLap'];
 
     protected override render(vehicleInfo: IDriverInfo, fuelLeft: number, battery: number, fuelPerLap: number): string {
         if (vehicleInfo.engineType === EEngineType.Electric) {
             fuelLeft = battery;
         }
-        if (!valueIsValidAssertNull(fuelLeft) || !valueIsValidAssertNull(fuelPerLap) || fuelPerLap === 0) {
+        if (!valueIsValidAssertUndefined(fuelLeft) || !valueIsValidAssertUndefined(fuelPerLap) || fuelPerLap === 0) {
             this.root.style.setProperty('--fuel-left-color', 'rgb(0, 255, 0)')
             return NA;
         }
