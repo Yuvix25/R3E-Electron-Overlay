@@ -1,4 +1,5 @@
 using log4net;
+using R3E.Data;
 using ReHUD.Models.LapData;
 
 namespace ReHUD.Models;
@@ -48,6 +49,8 @@ public class Driver {
     private double? crossedFinishLineTime = null;
     private bool attemptedLoadingBestLap = false;
     private bool lapEnded = false;
+    private int lastLapNum;
+    private double? lastLaptime = null;
 
     private static Driver? mainDriver = null;
 
@@ -55,6 +58,7 @@ public class Driver {
         this.uid = uid;
         this.trackLength = trackLength;
         this.dataPoints = new DataPoints(trackLength, DATA_POINTS_GAP);
+        this.lastLapNum = completedLaps;
     }
 
     public void ClearTempData() {
@@ -140,7 +144,7 @@ public class Driver {
     /// <param name="timeNow">Current game simulation time. (Seconds)</param>
     /// <returns>True if we encountered a position jump, false otherwise.</returns>
     /// <exception cref="PositionJumpException"></exception>
-    public bool AddDataPoint(double distance, double timeNow) {
+    public bool AddDataPoint(int completedLaps, double distance, double timeNow) {
         try {
             int newIndex = (int) Math.Floor(distance / DATA_POINTS_GAP);
 
@@ -171,11 +175,22 @@ public class Driver {
             return false;
         } finally {
             lapEnded = false;
+            lastLapNum = completedLaps;
         }
     }
 
-    public bool EndLap(double? laptime, double timeNow, int completedLaps, R3E.Constant.Session session, bool? safeMode) {
+    public bool EndLap(double timeNow, DriverData driverData, R3E.Constant.Session session, bool? safeMode) {
+        bool lastLaptimeBroken = true;
         try {
+            double laptime = driverData.sectorTimePreviousSelf.sector3;
+            double laptimeCurrent = driverData.lapTimeCurrentSelf;
+            int completedLaps = driverData.completedLaps;
+
+            if ((lastLapNum == completedLaps || laptime < 0) && laptimeCurrent > 0) {
+                logger.InfoFormat("Game did not update laptime yet (currently set to {0}), using estimated laptime {1}", laptime, laptimeCurrent);
+                laptime = laptimeCurrent;
+            }
+
             if (IsMainDriver()) {
                 logger.DebugFormat("Ending lap for {0}. Laptime: {1}, Completed laps: {2}", uid, laptime, completedLaps);
             }
@@ -192,7 +207,7 @@ public class Driver {
             lapEnded = true;
 
             if (CrossedFinishLine() && (session != R3E.Constant.Session.Race || completedLaps > 1)) {
-                if (laptime == null || laptime < 0) {
+                if (laptime < 0) {
                     if (Math.Abs(crossedFinishLineTime!.Value - dataPoints.GetDataPoint(0)!.Value) > 2) {
                         logger.WarnFormat("Gap too big between finish line time and first data point for {0}. Crossed finish line time: {1}, First data point: {2}, Time now: {3}", uid, crossedFinishLineTime, dataPoints.GetDataPoint(0), timeNow);
                         SetLapInvalid();
@@ -200,6 +215,7 @@ public class Driver {
                     }
 
                     laptime = timeNow - dataPoints.GetDataPoint(0)!.Value;
+                    logger.InfoFormat("Laptime for {0} is negative. Calculated laptime: {1}", uid, laptime);
                 }
 
                 if (laptime < MIN_LAPTIME) {
@@ -208,7 +224,10 @@ public class Driver {
                     return false;
                 }
 
-                logger.DebugFormat("Safe mode: {0}, Best laptime: {1}, Current lap valid: {2}, Best lap valid: {3}", safeMode, bestLapTime, currentLapValid, bestLapValid);
+                lastLaptime = laptime;
+                lastLaptimeBroken = false;
+
+                logger.DebugFormat("Safe mode: {0}, Laptime: {1}, Best laptime: {2}, Current lap valid: {3}, Best lap valid: {4}", safeMode, laptime, bestLapTime, currentLapValid, bestLapValid);
 
                 if (safeMode == null || !safeMode!.Value) {
                     if (bestLapTime == null || (laptime < bestLapTime && currentLapValid) || (currentLapValid && !bestLapValid)) {
@@ -240,6 +259,10 @@ public class Driver {
             return shouldSaveBestLap;
         } finally {
             crossedFinishLineTime = timeNow;
+
+            if (lastLaptimeBroken) {
+                lastLaptime = null;
+            }
         }
     }
 
@@ -341,6 +364,10 @@ public class Driver {
         }
 
         return bestLapTime;
+    }
+
+    public double? GetLastLaptime() {
+        return lastLaptime;
     }
 
     public double? GetBestLapTime() {

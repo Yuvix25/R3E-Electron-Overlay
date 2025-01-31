@@ -17,6 +17,20 @@ export default class RelativeViewer extends HudElement {
         this.rankedData = this.hud.rankedDataService;
     }
 
+    private static toDeltaList(drivers: IExtendedDriverData[], mainDriver: IExtendedDriverData, deltas: Record<string, number>): Array<[IExtendedDriverData, number]> {
+        const deltaList: Array<[IExtendedDriverData, number]> = [];
+
+        for (const uid in deltas) {
+            const driver = drivers.find(d => getUid(d.driverInfo) === uid);
+
+            if (driver != null && driver !== mainDriver && !finishedBadly(driver.finishStatus)) {
+                deltaList.push([driver, deltas[uid]]);
+            }
+        }
+
+        return deltaList;
+    }
+
     protected override render(allDrivers: IExtendedDriverData[], place: number, trackLength: number, phase: ESessionPhase, deltasAhead: Record<string, number>, deltasBehind: Record<string, number>): null | Hide {
         const relative = document.getElementById('relative-viewer');
         const relativeTable = relative.getElementsByTagName('tbody')[0];
@@ -27,10 +41,9 @@ export default class RelativeViewer extends HudElement {
             return this.hide();
         }
 
-        if (allDrivers == null || place == null || allDrivers.length <= 1)
+        if (allDrivers == null || place == null || allDrivers.length <= 1) {
             return this.hide();
-
-        let driverCount = allDrivers.length;
+        }
 
         let classes = new Set<number>();
         for (const driver of allDrivers) {
@@ -56,29 +69,15 @@ export default class RelativeViewer extends HudElement {
         if (myUid == null || myDriver == null)
             return this.hide();
 
-        const deltasAheadArr: Array<[IExtendedDriverData, number]> = [];
-        const deltasBehindArr: Array<[IExtendedDriverData, number]> = [];
-        for (const driver of allDrivers) {
-            if (driver === myDriver) continue;
-            if (finishedBadly(driver.finishStatus)) {
-                driverCount--;
-                continue;
-            }
-
-            const uid = driver.driverInfo.uid;
-
-            if (deltasAhead[uid] != null) {
-                deltasAheadArr.push([driver, deltasAhead[uid]]);
-            } else if (deltasBehind[uid] != null) {
-                deltasBehindArr.push([driver, deltasBehind[uid]]);
-            }
-        }
+        const deltasAheadArr: Array<[IExtendedDriverData, number]> = RelativeViewer.toDeltaList(allDrivers, myDriver, deltasAhead);
+        const deltasBehindArr: Array<[IExtendedDriverData, number]> = RelativeViewer.toDeltaList(allDrivers, myDriver, deltasBehind);
+        const driverCount = deltasAheadArr.length + deltasBehindArr.length;
 
         deltasAheadArr.sort((a, b) => {
-            return this.getDistanceToDriverAhead(trackLength, myDriver, a[0]) - this.getDistanceToDriverAhead(trackLength, myDriver, b[0]);
+            return this.getDistanceToDriverAhead(trackLength, myDriver, b[0]) - this.getDistanceToDriverAhead(trackLength, myDriver, a[0]);
         });
         deltasBehindArr.sort((a, b) => {
-            return this.getDistanceToDriverAhead(trackLength, myDriver, b[0]) - this.getDistanceToDriverAhead(trackLength, myDriver, a[0]);
+            return this.getDistanceToDriverBehind(trackLength, myDriver, a[0]) - this.getDistanceToDriverBehind(trackLength, myDriver, b[0]);
         });
 
         deltasAheadArr.push([myDriver, 0]);
@@ -104,8 +103,10 @@ export default class RelativeViewer extends HudElement {
 
         let zeroDeltaCount = 0;
         for (let i = start; i < end; i++) {
-            if (mergedDeltas[i] == undefined)
+            if (mergedDeltas[i] == undefined) {
                 break;
+            }
+
             const driver = mergedDeltas[i][0];
 
             if (driver.place == -1) break;
@@ -171,8 +172,9 @@ export default class RelativeViewer extends HudElement {
             pitCell.style.opacity = driver.inPitlane ? '1' : '0';
 
             const deltaRaw = mergedDeltas[i][1];
-            if (typeof deltaRaw === 'number' && deltaRaw.toFixed(1) === '0.0')
+            if (typeof deltaRaw === 'number' && deltaRaw.toFixed(1) === '0.0') {
                 zeroDeltaCount++;
+            }
             const delta = driver.place == place ? '' : (deltaRaw == null ? NA : deltaRaw.toFixed(1));
             insertCell(row, delta, 'time-delta');
         }
@@ -198,5 +200,9 @@ export default class RelativeViewer extends HudElement {
         }
 
         return distance;
+    }
+
+    private getDistanceToDriverBehind(trackLength: number, driver: IExtendedDriverData, driverBehind: IExtendedDriverData): number {
+        return this.getDistanceToDriverAhead(trackLength, driverBehind, driver);
     }
 }

@@ -67,12 +67,12 @@ namespace ReHUD.Services
 
             this.sharedMemoryService.OnDataReady += OnDataReady;
             this.eventService.NewLap += SaveData;
-            this.eventService.PositionJump += (sender, e) => InvalidateLap();
+            this.eventService.PositionJump += InvalidateLapDriver;
+            this.eventService.EnterPitlane += InvalidateLapDriver;
+            this.eventService.ExitPitlane += InvalidateLapDriver;
             this.eventService.SessionChange += (sender, e) => InvalidateLap();
             this.eventService.EnterReplay += (sender, e) => InvalidateLap();
             this.eventService.ExitReplay += (sender, e) => InvalidateLap();
-            this.eventService.EnterPitlane += (sender, e) => InvalidateLap();
-            this.eventService.ExitPitlane += (sender, e) => InvalidateLap();
             this.eventService.MainDriverChange += (sender, e) => {
                 InvalidateLap();
                 driverService.UpdateBestLap(LoadBestLap());
@@ -153,6 +153,12 @@ namespace ReHUD.Services
             ResetLapValid();
         }
 
+        private void InvalidateLapDriver(object? sender, DriverEventArgs driver) {
+            if (driver.IsMainDriver) {
+                InvalidateLap();
+            }
+        }
+
         public static readonly TimeSpan UPDATE_COMBINATION_SUMMARY_EVERY = TimeSpan.FromMilliseconds(300);
 
         private async Task ProcessR3EData(CancellationToken cancellationToken) {
@@ -198,7 +204,7 @@ namespace ReHUD.Services
                 }
                 extraData.rawData = dataClone;
 
-                if (recordingData && (dataClone.gameInReplay == 1 || dataClone.inPitlane == 1)) {
+                if (dataClone.gameInReplay == 1 || dataClone.inPitlane == 1) {
                     ResetRecordingData();
                 }
 
@@ -266,9 +272,9 @@ namespace ReHUD.Services
         }
 
         private void SaveData(object? sender, DriverEventArgs args) {
-            Driver? driver = driverService.NewLap(extraData, args.Driver);
+            Tuple<Driver, bool>? res = driverService.NewLap(extraData, args.Driver);
 
-            if (!args.IsMainDriver) {
+            if (!args.IsMainDriver || res == null) {
                 return;
             }
 
@@ -278,6 +284,12 @@ namespace ReHUD.Services
             bool lapSaved = false;
 
             try {
+                double? laptime = res.Item1.GetLastLaptime();
+                if (laptime == null) {
+                    logger.Error("Last lap was abnormal, not saving lap");
+                    return;
+                }
+
                 if (recordingData) {
                     bool tireWearDataValid = lastTireWear != null && tireWearNow != null;
                     TireWearObj? tireWearDiff = tireWearDataValid ? lastTireWear! - tireWearNow! : null;
@@ -287,24 +299,14 @@ namespace ReHUD.Services
 
                     if (lapValid) {
                         LapContext context = new(data.layoutId, data.vehicleInfo.modelId, data.vehicleInfo.classPerformanceIndex, data.tireSubtypeFront, data.tireSubtypeRear);
-
-                        bool usingEstimatedLapTime = (lastLapNum == data.completedLaps || data.lapTimePreviousSelf < 0) && data.lapTimeCurrentSelf > 0;
-                        double? lapTime = null;
-                        if (usingEstimatedLapTime) {
-                            lapTime = data.lapTimeCurrentSelf;
-                            logger.InfoFormat("Game did not update laptime yet (currently set to {0}), using estimated laptime {1}", data.lapTimePreviousSelf, lapTime);
-                        } else if (data.lapTimePreviousSelf > 0) {
-                            lapTime = data.lapTimePreviousSelf;
-                        }
-
-                        if (lapTime != null) {
+                        if (laptime != null) {
                             var savedTransaction = false;
                             var transaction = lapDataService.BeginTransaction();
                             try {
-                                Lap lap = lapDataService.LogLap(context, lapValid, lapTime.Value);
+                                Lap lap = lapDataService.LogLap(context, lapValid, laptime.Value);
                                 lapSaved = true;
                                 extraData.lapId = lap.Id;
-                                extraData.lastLapTime = lapTime;
+                                extraData.lastLapTime = laptime;
 
                                 if (tireWearDataValid && data.tireWearActive >= 1) {
                                     lapDataService.Log(new TireWear(lap, tireWearDiff!, new TireWearContext(data.tireWearActive)));
@@ -314,8 +316,8 @@ namespace ReHUD.Services
                                     lapDataService.Log(new FuelUsage(lap, fuelDiff!.Value, new FuelUsageContext(data.fuelUseActive)));
                                 }
 
-                                if (driver != null) {
-                                    SaveBestLap(lap, driver.BestLap!.GetNonNullPoints(), Driver.DATA_POINTS_GAP);
+                                if (res.Item2) {
+                                    SaveBestLap(lap, res.Item1.BestLap!.GetNonNullPoints(), Driver.DATA_POINTS_GAP);
                                 }
 
                                 // Commit async to not block the thread.
@@ -323,27 +325,6 @@ namespace ReHUD.Services
                                 // TODO: Maybe move this to a separate thread with a queue?
                                 transaction.CommitAsync();
                                 savedTransaction = true;
-
-                                if (usingEstimatedLapTime) {
-                                    logger.Info("Waiting for laptime value from the game");
-                                    
-                                    // Wait for laptime value from the game in new thread with 2 seconds timeout.
-                                    var lastLap = data.completedLaps;
-                                    Task.Run(() => {
-                                        var innerLapDataService = new LapDataService(); // Create a new one because we're in a different thread.
-
-                                        var startTime = DateTime.UtcNow;
-                                        while (DateTime.UtcNow - startTime < TimeSpan.FromSeconds(5)) {
-                                            if (data.completedLaps > lastLap) {
-                                                if (data.lapTimePreviousSelf > 0) {
-                                                    innerLapDataService.UpdateLapTime(lap, data.lapTimePreviousSelf);
-                                                }
-                                                break;
-                                            }
-                                            Thread.Sleep(100);
-                                        }
-                                    });
-                                }
                             } catch (Exception e) {
                                 logger.Error("Error saving lap", e);
                             } finally {

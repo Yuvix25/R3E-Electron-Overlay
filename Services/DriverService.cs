@@ -105,10 +105,6 @@ public class DriverService : IDriverService, IDisposable
                 }
             }
 
-            if (driver.inPitlane == 1) {
-                drivers[uid].ClearTempData();
-            }
-
             if (driver.currentLapValid == 0) {
                 drivers[uid].SetLapInvalid();
             }
@@ -148,7 +144,13 @@ public class DriverService : IDriverService, IDisposable
         Driver? mainDriver = Driver.GetMainDriver();
         if (mainDriver != null && mainDriverData != null) {
             foreach (DriverData driverData in data.driverData) {
-                Driver driver = drivers[DriverUtils.GetDriverUid(driverData.driverInfo)];
+                string uid = DriverUtils.GetDriverUid(driverData.driverInfo);
+
+                if (deltasAhead.ContainsKey(uid) || deltasBehind.ContainsKey(uid)) {
+                    continue;
+                }
+
+                Driver driver = drivers[uid];
 
                 if (!driver.IsMainDriver()) {
                     double? deltaAhead = mainDriver.CalculateDeltaToDriverAhead(driver);
@@ -159,24 +161,24 @@ public class DriverService : IDriverService, IDisposable
                         double distanceBehind = DriverUtils.CalculateDistanceToDriverBehind(trackLength, mainDriverData!.Value, driverData);
 
                         if (distanceAhead < distanceBehind) {
-                            deltasAhead.Add(DriverUtils.GetDriverUid(driverData.driverInfo), null);
+                            deltasAhead.Add(uid, null);
                         } else {
-                            deltasBehind.Add(DriverUtils.GetDriverUid(driverData.driverInfo), null);
+                            deltasBehind.Add(uid, null);
                         }
                     } else if (deltaAhead == null) {
-                        deltasBehind.Add(DriverUtils.GetDriverUid(driverData.driverInfo), deltaBehind);
+                        deltasBehind.Add(uid, deltaBehind);
                     } else if (deltaBehind == null) {
-                        deltasAhead.Add(DriverUtils.GetDriverUid(driverData.driverInfo), -deltaAhead);
+                        deltasAhead.Add(uid, -deltaAhead);
                     } else {
                         if (deltaAhead < deltaBehind) {
-                            deltasAhead.Add(DriverUtils.GetDriverUid(driverData.driverInfo), -deltaAhead);
+                            deltasAhead.Add(uid, -deltaAhead);
                         } else {
-                            deltasBehind.Add(DriverUtils.GetDriverUid(driverData.driverInfo), deltaBehind);
+                            deltasBehind.Add(uid, deltaBehind);
                         }
                     }
                 }
 
-                driver.AddDataPoint(driverData.lapDistance, extraData.rawData.player.gameSimulationTime);
+                driver.AddDataPoint(driverData.completedLaps, driverData.lapDistance, extraData.rawData.player.gameSimulationTime);
             }
 
             double? currentLaptime = mainDriver.GetCurrentLaptime(extraData.rawData.player.gameSimulationTime);
@@ -232,7 +234,7 @@ public class DriverService : IDriverService, IDisposable
         }
     }
 
-    public Driver? NewLap(R3EExtraData extraData, DriverData driverData) {
+    public Tuple<Driver, bool>? NewLap(R3EExtraData extraData, DriverData driverData) {
         if (driverData.place == 1 && (extraData.rawData.sessionTimeRemaining == 0 || leaderCrossedFinishLineAt0 > 0)) {
             leaderCrossedFinishLineAt0++;
         }
@@ -242,10 +244,12 @@ public class DriverService : IDriverService, IDisposable
         if (drivers.ContainsKey(uid)) {
             Driver driver = drivers[uid];
 
-            bool shouldSaveBestLap = driver.EndLap(extraData.lastLapTime, extraData.rawData.player.gameSimulationTime, extraData.rawData.completedLaps, (R3E.Constant.Session) extraData.rawData.sessionType, (bool?) Startup.settings.Data.Get("relativeSafeMode", false));
+            bool shouldSaveBestLap = driver.EndLap(extraData.rawData.player.gameSimulationTime, driverData, (R3E.Constant.Session) extraData.rawData.sessionType, (bool?) Startup.settings.Data.Get("relativeSafeMode", false));
 
             if (shouldSaveBestLap && extraData.rawData.gameInMenus == 0 && extraData.rawData.gameInReplay == 0 && extraData.rawData.gamePaused == 0) {
-                return driver;
+                return new(driver, true);
+            } else {
+                return new(driver, false);
             }
         }
 
