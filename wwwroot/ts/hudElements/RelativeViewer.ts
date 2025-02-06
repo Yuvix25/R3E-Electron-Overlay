@@ -71,7 +71,6 @@ export default class RelativeViewer extends HudElement {
 
         const deltasAheadArr: Array<[IExtendedDriverData, number]> = RelativeViewer.toDeltaList(allDrivers, myDriver, deltasAhead);
         const deltasBehindArr: Array<[IExtendedDriverData, number]> = RelativeViewer.toDeltaList(allDrivers, myDriver, deltasBehind);
-        const driverCount = deltasAheadArr.length + deltasBehindArr.length;
 
         deltasAheadArr.sort((a, b) => {
             return this.getDistanceToDriverAhead(trackLength, myDriver, b[0]) - this.getDistanceToDriverAhead(trackLength, myDriver, a[0]);
@@ -81,6 +80,8 @@ export default class RelativeViewer extends HudElement {
         });
 
         deltasAheadArr.push([myDriver, 0]);
+
+        const driverCount = deltasAheadArr.length + deltasBehindArr.length;
 
         let start = 0, end = RELATIVE_LENGTH;
         if (deltasAheadArr.length - 1 >= halfLengthTop && deltasBehindArr.length >= halfLengthBottom) {

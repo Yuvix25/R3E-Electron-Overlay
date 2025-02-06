@@ -278,7 +278,7 @@ public class Driver {
             return 0;
         }
 
-        if ((IsMainDriver() || driverAhead.IsMainDriver()) && mainDriver!.BestLap != null) {
+        if ((IsMainDriver() || driverAhead.IsMainDriver()) && mainDriver?.BestLap != null) {
             double? res = mainDriver.CalculateDeltaBasedOnBestLap(index, aheadIndex);
             if (res != null) {
                 return res;
@@ -317,18 +317,25 @@ public class Driver {
             return null;
         }
 
-        double? res = points.CalculateTimeDifference(indexBehind, indexAhead);
+        double? diff = points.CalculateTimeDifference(indexBehind, indexAhead);
 
-        if (res != null) {
-            if (Math.Abs(res.Value) < EPSILON) {
+        if (diff != null) {
+            double delta = diff.Value;
+
+            if (indexAhead < indexBehind) {
+                double? estimatedLapTime = EstimatedLapTime();
+                if (estimatedLapTime == null) {
+                    return null;
+                }
+
+                delta = estimatedLapTime.Value - delta;
+            }
+
+            if (Math.Abs(delta) < EPSILON) {
                 return 0;
             }
 
-            if (indexAhead < indexBehind) {
-                return EstimatedLapTime() - res;
-            }
-
-            return res;
+            return delta;
         }
 
         return null;
