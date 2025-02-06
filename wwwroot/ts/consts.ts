@@ -1,18 +1,45 @@
 /* ========================================== Types ========================================== */
 
 import {GracePeriodBetweenPresets} from './SharedMemorySupplier.js';
-import IShared, { EFinishStatus, ESessionPhase, IDriverData, ISectors } from './r3eTypes.js';
+import IShared, { EFinishStatus, ESessionPhase, IDriverData, ISectors, ITireData } from './r3eTypes.js';
+
+
+interface EventLog {
+  EventName: string;
+}
+interface ValueEventLog extends EventLog {
+  OldValue: any;
+  NewValue: any;
+}
+interface DriverEventLog extends EventLog {
+  Driver: IDriverData;
+  IsMainDriver: boolean;
+}
 
 export interface IExtendedShared {
   rawData: IShared;
+  lapId: number;
+  lastLapTime: number;
+  allTimeBestLapTime: number;
   fuelPerLap: number;
   fuelLastLap: number;
+  tireWearPerLap: ITireData<number>;
+  tireWearLastLap: ITireData<number>;
   averageLapTime: number;
   bestLapTime: number;
+  sessionBestLapTime: number;
   estimatedRaceLapCount: number;
   lapsUntilFinish: number;
   forceUpdateAll: boolean;
   timestamp: number;
+  events: (EventLog | ValueEventLog | DriverEventLog)[];
+  deltasAhead: Record<string, number>;
+  deltasBehind: Record<string, number>;
+  leaderCrossedSFLineAt0: number;
+  deltaToSessionBestLap: number;
+  deltaToBestLap: number;
+  crossedFinishLine: boolean;
+  currentLaptime: number;
 }
 
 /* ========================================== Constants ========================================== */
@@ -200,7 +227,7 @@ export function finishedBadly(finishStatus: EFinishStatus) {
 export function getSessionType(
   sessionType: keyof typeof SESSION_TYPES
 ): (typeof SESSION_TYPES)[keyof typeof SESSION_TYPES] {
-  if (valueIsValidAssertNull(sessionType) && 0 <= sessionType && sessionType <= 4) {
+  if (valueIsValidAssertUndefined(sessionType) && 0 <= sessionType && sessionType <= 4) {
     return SESSION_TYPES[sessionType];
   }
   return SESSION_TYPES[5];
@@ -258,23 +285,23 @@ export function validOrDefault(val: any, defaultVal: any) {
   return val;
 }
 
-export function valueIsValidAssertNull(val: number) {
-  if (val == null) {
+export function valueIsValidAssertUndefined(val: number) {
+  if (val === undefined) {
     if (!GracePeriodBetweenPresets.isInGracePeriod) {
       throw new Error('value is null');
     }
     return false;
   }
-  return val != -1;
+  return valueIsValid(val);
 }
 
 export function valueIsValid(val: number) {
   return val != -1 && val != null;
 }
 
-export function allValuesAreValid(...values: number[]) {
+export function valuesAreValid(...values: number[]) {
   for (const val of values) {
-    if (!valueIsValidAssertNull(val)) return false;
+    if (!valueIsValidAssertUndefined(val)) return false;
   }
   return true;
 }

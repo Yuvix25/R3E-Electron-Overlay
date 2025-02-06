@@ -1,10 +1,12 @@
+using log4net;
 using Newtonsoft.Json;
+using ReHUD.Interfaces;
 
 namespace ReHUD.Models;
 
-public abstract class UserData
+public abstract class UserData : IUserData
 {
-    public static readonly string dataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ReHUD");
+    private static readonly ILog logger = LogManager.GetLogger(typeof(UserData));
 
     public virtual string SubPath { get; } = "";
     protected abstract string DataFilePath { get; }
@@ -31,13 +33,13 @@ public abstract class UserData
             return true;
         }
         catch (Exception e) {
-            Startup.logger.Error($"Failed to delete file {DataFilePath}", e);
+            logger.Error($"Failed to delete file {DataFilePath}", e);
             return false;
         }
     }
 
     public string PathTo(string name) {
-        return Path.Combine(dataPath, SubPath, name);
+        return Path.Combine(IUserData.dataPath, SubPath, name);
     }
 
     private string? ReadDataFile(string name) {

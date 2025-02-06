@@ -1,11 +1,12 @@
 import HudElement, {Hide} from "./HudElement.js";
-import {laptimeFormat, valueIsValidAssertNull, validNumberOrDefault, nameFormat, getClassColors, POSITION_BAR_CELL_COUNT} from "../consts.js";
+import {laptimeFormat, valueIsValidAssertUndefined, validNumberOrDefault, nameFormat, getClassColors, POSITION_BAR_CELL_COUNT} from "../consts.js";
 import {EFinishStatus, ESession, IDriverData, ISectors} from "../r3eTypes.js";
-import {Driver, getRaceDeltas, getUid} from "../utils.js";
+import {getRaceDeltas, getUid} from "../utils.js";
 import SettingsValue from "../SettingsValue.js";
+import {SharedMemoryKey} from '../SharedMemoryConsumer.js';
 
 export default class PositionBar extends HudElement {
-    override sharedMemoryKeys: string[] = ['driverData', 'position', 'sessionType', 'sectorTimesSessionBestLap'];
+    override sharedMemoryKeys: SharedMemoryKey[] = ['driverData', 'position', 'sessionType', 'sectorTimesSessionBestLap'];
 
     protected override render(driverData: IDriverData[], position: number, sessionType: ESession, sessionBestSectors: ISectors, elementId: string): Hide | null {
         const positionBar = document.getElementById(elementId);
@@ -50,7 +51,7 @@ export default class PositionBar extends HudElement {
             }
         }
 
-        if (!valueIsValidAssertNull(position) || Driver.mainDriver == null) {
+        if (!valueIsValidAssertUndefined(position)) {
             return this.hide();
         }
 
@@ -94,7 +95,7 @@ export default class PositionBar extends HudElement {
                 positionElement.style.backgroundColor = classColors.get(driver.driverInfo.classPerformanceIndex);
                 positionElement.textContent = driver.placeClass.toString();
 
-                if (Driver.mainDriver.userId === uid) {
+                if (driver === me) {
                     positionBarCell.style.backgroundColor = 'rgba(255, 255, 0, 0.4)';
                 } else {
                     positionBarCell.style.backgroundColor = null;
@@ -115,7 +116,7 @@ export default class PositionBar extends HudElement {
                 switch (sessionType) {
                     case ESession.Race:
                         time = driver.sectorTimePreviousSelf.sector3;
-                        if (valueIsValidAssertNull(time)) {
+                        if (valueIsValidAssertUndefined(time)) {
                             if (time <= sessionBestSectors.sector3) {
                                 timeColor = 'purple';
                             } else if (time <= driver.sectorTimeBestSelf.sector3) {
@@ -147,7 +148,7 @@ export default class PositionBar extends HudElement {
                     case ESession.Practice:
                     case ESession.Warmup:
                         time = driver.sectorTimeBestSelf.sector3;
-                        if (myTime != null && valueIsValidAssertNull(time)) {
+                        if (myTime != null && valueIsValidAssertUndefined(time)) {
                             deltaNumber = time - myTime;
                             deltaString = laptimeFormat(deltaNumber, true);
                         }
@@ -161,7 +162,7 @@ export default class PositionBar extends HudElement {
                     timeElement.textContent = '';
                 }
 
-                if (deltaString != null && (Driver.mainDriver.userId !== uid || showDeltaForMainDriver)) {
+                if (deltaString != null && (driver !== me || showDeltaForMainDriver)) {
                     if (deltaNumber != null) deltaString = deltaNumber > 0 ? `+${deltaString}` : deltaString;
 
                     deltaElement.textContent = deltaString;

@@ -1,48 +1,50 @@
 import HudElement, {Hide, Style} from "./HudElement.js";
-import {DELTA_MODE, SHOW_DELTA_ON_INVALID_LAPS, valueIsValidAssertNull} from "../consts.js";
-import IShared, {IDriverData} from "../r3eTypes.js";
-import {DeltaManager, Driver} from "../utils.js";
+import {DELTA_MODE, IExtendedShared, SHOW_DELTA_ON_INVALID_LAPS, valueIsValidAssertUndefined} from "../consts.js";
+import {IDriverData} from "../r3eTypes.js";
+import {DeltaManager} from "../utils.js";
 import SettingsValue from "../SettingsValue.js";
+import {SharedMemoryKey} from '../SharedMemoryConsumer.js';
 
 export default class Delta extends HudElement {
-    override sharedMemoryKeys: string[] = ['timeDeltaBestSelf', 'lapTimeCurrentSelf', 'currentLapValid', 'lapDistance'];
+    override sharedMemoryKeys: SharedMemoryKey[] = ['timeDeltaBestSelf', 'currentLapValid', 'lapDistance', '+deltaToSessionBestLap', '+deltaToBestLap', '+bestLapTime', '+sessionBestLapTime', '+crossedFinishLine'];
 
-    protected override onNewLap(_data: IShared, driver: IDriverData, isMainDriver: boolean): void {
-        if (isMainDriver)
+    protected override onNewLap(_data: IExtendedShared, driver: IDriverData, isMainDriver: boolean): void {
+        if (isMainDriver) {
             DeltaManager.clear();
+        }
     }
 
-    protected override render(timeDeltaBestSelf: number, lapTimeCurrentSelf: number, currentLapValid: number, lapDistance: number, elementId: string): Hide | Style {
-        let usingAlltime = false;
+    protected override render(timeDeltaBestSelf: number, currentLapValid: number, lapDistance: number, deltaToSession: number, deltaToBest: number, bestLapTime: number, sessionBestLapTime: number, crossedFinishLine: boolean, elementId: string): Hide | Style {
+        let usingAllTime = false;
         switch (SettingsValue.get(DELTA_MODE)) {
             case 'session':
             case 'session-fallback-alltime':
-                if ((timeDeltaBestSelf == null || timeDeltaBestSelf == -1000) && (SettingsValue.get(SHOW_DELTA_ON_INVALID_LAPS) || currentLapValid) && Driver.mainDriver?.sessionBestLap != null) {
-                    timeDeltaBestSelf = Driver.mainDriver.getDeltaToLap(Driver.mainDriver.sessionBestLap, lapDistance, lapTimeCurrentSelf);
+                if ((timeDeltaBestSelf == null || timeDeltaBestSelf == -1000) && (SettingsValue.get(SHOW_DELTA_ON_INVALID_LAPS) || currentLapValid) && deltaToSession != null) {
+                    timeDeltaBestSelf = deltaToSession;
                 }
                 
                 if (SettingsValue.get(DELTA_MODE) !== 'session-fallback-alltime' || (timeDeltaBestSelf != null && timeDeltaBestSelf != -1000)) break;
             case 'alltime':
-                if (Driver.mainDriver?.bestLap != null && Driver.mainDriver.bestLapTimeValid && (Driver.mainDriver.bestLapTime != Driver.mainDriver.sessionBestLapTime || timeDeltaBestSelf == -1000 || timeDeltaBestSelf == null)) {
-                    timeDeltaBestSelf = Driver.mainDriver.getDeltaToLap(Driver.mainDriver.bestLap, lapDistance, lapTimeCurrentSelf);
-                    usingAlltime = true;
+                if (deltaToBest != null && (bestLapTime != sessionBestLapTime || timeDeltaBestSelf == -1000 || timeDeltaBestSelf == null)) {
+                    timeDeltaBestSelf = deltaToBest;
+                    usingAllTime = true;
                 }
                 break;
         }
 
-        if (Driver.mainDriver != null && Driver.mainDriver.crossedFinishLine == null) {
+        if (!crossedFinishLine) {
             currentLapValid = 0;
         } else if (SettingsValue.get(SHOW_DELTA_ON_INVALID_LAPS)) {
             currentLapValid = 1;
         }
 
-        if (timeDeltaBestSelf == null || timeDeltaBestSelf == -1000 || !valueIsValidAssertNull(currentLapValid) || currentLapValid === 0) {
+        if (timeDeltaBestSelf == null || timeDeltaBestSelf == -1000 || !valueIsValidAssertUndefined(currentLapValid) || currentLapValid === 0) {
             DeltaManager.clear();
             return this.hide('0.000');
         }
 
         DeltaManager.addDelta(timeDeltaBestSelf);
-        const delta = DeltaManager.getDeltaOfDeltas(usingAlltime ? 0.5 : null); // much more fluctuation for alltime deltas, smaller multiplier to compensate
+        const delta = DeltaManager.getDeltaOfDeltas(usingAllTime ? 0.5 : null); // much more fluctuation for alltime deltas, smaller multiplier to compensate
 
         const parent = document.getElementById(elementId).parentElement;
         const deltaText = parent?.children?.[0];

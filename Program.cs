@@ -1,9 +1,15 @@
 using ElectronNET.API;
+using log4net;
+using log4net.Config;
+using Microsoft.EntityFrameworkCore;
 using ReHUD.Factories;
 using ReHUD.Interfaces;
+using ReHUD.Models;
+using ReHUD.Models.LapData;
 using ReHUD.Services;
 using ReHUD.Utils;
 using System.Diagnostics;
+using System.Reflection;
 
 namespace ReHUD;
 
@@ -14,6 +20,10 @@ public static class Program
         Debugger.Launch();
 #endif
         try {
+            GlobalContext.Properties["LogFilePath"] = Path.Combine(IUserData.dataPath, "ReHUD.log");
+            var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
+            XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
+
             CreateWebHostBuilder(args).Build().Run();
         }
         catch (Exception ex) {
@@ -43,10 +53,12 @@ public static class Program
                 services.AddLogging();
                 services.AddSignalR();
                 services.AddRazorPages();
+                services.AddSingleton<IEventService, EventService>();
+                services.AddSingleton<IVersionService, VersionService>();
                 services.AddSingleton<IProcessObserverFactory, ProcessObserverFactory>();
                 services.AddSingleton<IRaceRoomObserver, RaceRoomObserver>();
                 services.AddSingleton<ISharedMemoryService, SharedMemoryService>();
+                services.AddSingleton<IDriverService, DriverService>();
                 services.AddSingleton<IR3EDataService, R3EDataService>();
-                services.AddSingleton<IUpdateService, UpdateService>();
             });
 }

@@ -1,3 +1,4 @@
+using log4net;
 using Newtonsoft.Json;
 using System.Collections.Immutable;
 
@@ -25,6 +26,8 @@ public class Settings : JsonUserData
 [JsonObject(MemberSerialization.OptIn)]
 public class SettingsData
 {
+    private readonly ILog logger = LogManager.GetLogger(typeof(SettingsData));
+
     [JsonProperty]
     private readonly Dictionary<string, object> settings;
 
@@ -61,7 +64,7 @@ public class SettingsData
 
     public void Set(string? key, object value) {
         if (key == null) {
-            Startup.logger.Error("Attempted to set null key in settings. Value: " + value.ToString());
+            logger.ErrorFormat("Attempted to set null key in settings. Value: {0}", value);
             return;
         }
 
